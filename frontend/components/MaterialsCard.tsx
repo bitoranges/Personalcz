@@ -286,8 +286,12 @@ export const MaterialsCard: React.FC = () => {
 
       // CRITICAL: Clear any previous provider selection to prevent wrong wallet being used
       // This MUST happen BEFORE selecting the new wallet
+      console.log('[MaterialsCard] Clearing previous provider, selecting wallet:', wallet.name, wallet.uuid);
       if (x402Client) {
+        console.log('[MaterialsCard] Previous rawProvider:', x402Client.rawProvider ? 'exists' : 'null');
         x402Client.rawProvider = null;
+        // Also clear wallet address to force fresh connection
+        x402Client.walletAddress = null;
       }
 
       // Get the provider for the selected wallet
@@ -375,18 +379,53 @@ export const MaterialsCard: React.FC = () => {
 
       // Proceed with unlock - payment will be requested directly
       // unlockContent will use the provider we just set
+      console.log('[MaterialsCard] Calling unlockContent with provider:', {
+        walletName: wallet.name,
+        walletUuid: wallet.uuid,
+        hasProvider: !!provider,
+        apiUrl: API_URL,
+        providerType: provider === window.ethereum ? 'ethereum' : provider === window.BinanceChain ? 'BinanceChain' : 'other'
+      });
+      
       const result = await x402Client.unlockContent(provider);
+      
+      console.log('[MaterialsCard] unlockContent result:', {
+        hasResult: !!result,
+        unlocked: result?.unlocked,
+        cancelled: result?.cancelled,
+        success: result?.success,
+        error: result?.error,
+        hasMaterials: !!result?.materials
+      });
       
       // Check if payment was cancelled
       if (result && result.cancelled) {
         // Payment was cancelled - show friendly message
+        console.log('[MaterialsCard] Payment cancelled by user');
         setError('Failed to unlock content. Please try again.');
         setIsLoading(false);
         setShowWalletSelector(false);
+        // CRITICAL: Clear provider on cancellation
+        if (x402Client) {
+          x402Client.rawProvider = null;
+        }
+        return;
+      }
+      
+      // Check for error in result
+      if (result && result.error) {
+        console.error('[MaterialsCard] Unlock error:', result.error);
+        setError(result.error || 'Failed to unlock content. Please try again.');
+        setIsLoading(false);
+        setShowWalletSelector(false);
+        if (x402Client) {
+          x402Client.rawProvider = null;
+        }
         return;
       }
       
       if (result && result.unlocked && result.materials) {
+        console.log('[MaterialsCard] Unlock successful!');
         setIsUnlocked(true);
         setMaterials(result.materials);
         
@@ -397,6 +436,7 @@ export const MaterialsCard: React.FC = () => {
         }
         
       } else {
+        console.error('[MaterialsCard] Unlock failed - invalid result:', result);
         setError('Failed to unlock content. Please try again.');
       }
     } catch (err: any) {

@@ -327,10 +327,18 @@ class x402Client {
     // 1. explicitProvider (passed from unlockContent) - highest priority
     // 2. this.rawProvider (set when wallet is selected)
     // 3. window providers (fallback only)
+    console.log('[x402-client] handlePaymentRequired provider selection:', {
+      hasExplicitProvider: !!explicitProvider,
+      hasRawProvider: !!this.rawProvider,
+      explicitProviderType: explicitProvider ? (explicitProvider === window.ethereum ? 'ethereum' : explicitProvider === window.BinanceChain ? 'BinanceChain' : 'other') : 'none',
+      rawProviderType: this.rawProvider ? (this.rawProvider === window.ethereum ? 'ethereum' : this.rawProvider === window.BinanceChain ? 'BinanceChain' : 'other') : 'none'
+    });
+    
     let provider = explicitProvider || this.rawProvider;
     
     // Only fallback to window providers if no explicit provider is set
     if (!provider && typeof window !== 'undefined') {
+      console.log('[x402-client] No explicit provider, falling back to window providers');
       if (window.ethereum && window.ethereum.request) {
         provider = window.ethereum;
       } else if (window.okxwallet && window.okxwallet.request) {
@@ -341,8 +349,11 @@ class x402Client {
     }
 
     if (!provider) {
+      console.error('[x402-client] No provider available!');
       throw new Error('No wallet provider available. Please select a wallet first.');
     }
+    
+    console.log('[x402-client] Selected provider:', provider === window.ethereum ? 'ethereum' : provider === window.BinanceChain ? 'BinanceChain' : 'other');
 
     // Execute payment transaction (this will handle wallet connection internally if needed)
     const paymentProof = await this.requestPayment(paymentData.paymentRequirements, provider);
@@ -363,7 +374,20 @@ class x402Client {
     }
 
     // Retry request with payment proof
-    return await this.retryWithPayment(originalUrl, originalOptions, paymentProof);
+    console.log('[x402-client] Payment successful, retrying request with proof');
+    const retryResponse = await this.retryWithPayment(originalUrl, originalOptions, paymentProof);
+    
+    // Check if retry was successful
+    if (retryResponse.status === 200) {
+      const retryData = await retryResponse.clone().json();
+      console.log('[x402-client] Retry response:', {
+        success: retryData?.success,
+        unlocked: retryData?.unlocked,
+        hasMaterials: !!retryData?.materials
+      });
+    }
+    
+    return retryResponse;
   }
 
   /**
@@ -744,17 +768,57 @@ class x402Client {
 
       // Not unlocked, trigger payment flow
       // CRITICAL: Pass provider to fetchWithPayment to ensure correct wallet is used
+      console.log('[x402-client] Fetching unlock endpoint:', {
+        apiUrl: this.apiUrl,
+        hasProvider: !!provider,
+        providerType: provider ? (provider === window.ethereum ? 'ethereum' : provider === window.BinanceChain ? 'BinanceChain' : 'other') : 'none'
+      });
+      
       const response = await this.fetchWithPayment(`${this.apiUrl}/api/unlock`, {
         method: 'GET',
       }, provider);
+      
+      console.log('[x402-client] Unlock response status:', response.status);
+      
       // Clone to avoid body stream error
       const responseClone = response.clone();
       const result = await responseClone.json();
+      
+      console.log('[x402-client] Unlock response data:', {
+        success: result?.success,
+        unlocked: result?.unlocked,
+        cancelled: result?.cancelled,
+        error: result?.error,
+        message: result?.message
+      });
       
       // Check if payment was cancelled (returns cancelled: true)
       if (result && result.cancelled) {
         // Return cancelled result instead of throwing
         return result;
+      }
+      
+      // Check for error response
+      if (response.status !== 200 && response.status !== 402) {
+        console.error('[x402-client] Unexpected response status:', response.status, result);
+        return {
+          error: result.error || result.message || 'Failed to unlock content',
+          unlocked: false
+        };
+      }
+      
+      // If 402, payment is required - this should be handled by fetchWithPayment
+      // If 200, check if unlocked
+      if (response.status === 200 && result.success && result.unlocked) {
+        return result;
+      }
+      
+      // If we get here, something went wrong
+      if (result.error) {
+        return {
+          error: result.error,
+          unlocked: false
+        };
       }
       
       return result;
