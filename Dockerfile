@@ -6,13 +6,14 @@ WORKDIR /app
 # Copy package files first (for better caching)
 COPY package*.json ./
 COPY frontend/package*.json ./frontend/
+COPY frontend/package-lock.json ./frontend/
 
 # Install root dependencies
-RUN npm ci
+RUN npm install --production=false
 
 # Install frontend dependencies
 WORKDIR /app/frontend
-RUN npm ci
+RUN npm install
 
 # Build frontend
 RUN npm run build
