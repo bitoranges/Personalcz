@@ -41,3 +41,4 @@ coverage/
 # CRITICAL: Materials directory - NEVER commit paid content to public repo
 materials/
 !materials-config.json
+!materials/.gitkeep

@@ -649,6 +649,89 @@ app.get('/api/download/:materialId', (req, res) => {
 });
 
 /**
+ * Admin: Upload material file
+ * POST /api/admin/upload
+ * Requires: X-Admin-Key header (set in environment variable ADMIN_KEY)
+ */
+app.post('/api/admin/upload', express.raw({ type: '*/*', limit: '100mb' }), (req, res) => {
+  try {
+    // Simple admin authentication (use API key)
+    const adminKey = process.env.ADMIN_KEY;
+    const providedKey = req.headers['x-admin-key'];
+    
+    if (!adminKey || providedKey !== adminKey) {
+      return res.status(401).json({
+        success: false,
+        error: 'Unauthorized. Admin key required.',
+      });
+    }
+
+    const materialId = req.headers['x-material-id'] || req.query.materialId;
+    const filename = req.headers['x-filename'] || req.query.filename;
+    const materialType = req.headers['x-material-type'] || req.query.type || 'pdf';
+
+    if (!materialId || !filename) {
+      return res.status(400).json({
+        success: false,
+        error: 'Material ID and filename are required',
+      });
+    }
+
+    // Create materials directory if it doesn't exist
+    const materialsDir = path.join(__dirname, 'materials', 'downloads');
+    if (!fs.existsSync(materialsDir)) {
+      fs.mkdirSync(materialsDir, { recursive: true });
+    }
+
+    // Save file
+    const filePath = path.join(materialsDir, filename);
+    fs.writeFileSync(filePath, req.body);
+
+    // Update materials-config.json
+    const configPath = path.join(__dirname, 'materials-config.json');
+    let config = { materials: [] };
+    if (fs.existsSync(configPath)) {
+      config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    }
+
+    // Find and update material or create new one
+    const materialIndex = config.materials.findIndex(m => m.id === materialId);
+    const materialData = {
+      id: materialId,
+      filename: filename,
+      downloadPath: `materials/downloads/${filename}`,
+      type: materialType,
+      ...(req.headers['x-title'] && { title: req.headers['x-title'] }),
+      ...(req.headers['x-description'] && { description: req.headers['x-description'] }),
+      ...(req.headers['x-date'] && { date: req.headers['x-date'] }),
+    };
+
+    if (materialIndex >= 0) {
+      config.materials[materialIndex] = { ...config.materials[materialIndex], ...materialData };
+    } else {
+      config.materials.push(materialData);
+    }
+
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+
+    res.json({
+      success: true,
+      message: 'File uploaded successfully',
+      materialId,
+      filename,
+      filePath: `materials/downloads/${filename}`,
+    });
+  } catch (error) {
+    console.error('Upload error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      message: error.message,
+    });
+  }
+});
+
+/**
  * Get content type based on material type
  */
 function getContentType(type) {
