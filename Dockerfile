@@ -8,12 +8,12 @@ COPY package*.json ./
 COPY frontend/package*.json ./frontend/
 COPY frontend/package-lock.json ./frontend/
 
-# Install root dependencies
-RUN npm install --production=false
+# Install root dependencies (skip postinstall to avoid conflicts)
+RUN npm install --production=false --ignore-scripts
 
-# Install frontend dependencies
+# Install frontend dependencies with legacy peer deps to handle React 19
 WORKDIR /app/frontend
-RUN npm install
+RUN npm install --legacy-peer-deps
 
 # Build frontend
 RUN npm run build
