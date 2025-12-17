@@ -3,8 +3,8 @@ nixPkgs = ["nodejs-18_x"]
 
 [phases.install]
 cmds = [
-  "npm install --production=false --ignore-scripts",
-  "cd frontend && npm install --legacy-peer-deps && cd .."
+  "npm install --production=false --ignore-scripts --no-audit --no-fund",
+  "cd frontend && npm install --legacy-peer-deps --no-audit --no-fund && cd .."
 ]
 
 [phases.build]
