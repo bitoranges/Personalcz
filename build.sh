@@ -1,13 +1,12 @@
 #!/bin/bash
-# Railway 构建脚本
-# 确保所有依赖都已安装后再构建
+set -e
 
 echo "📦 Installing root dependencies..."
-npm install
+npm install --production=false --ignore-scripts
 
 echo "📦 Installing frontend dependencies..."
 cd frontend
-npm install
+npm install --legacy-peer-deps
 cd ..
 
 echo "🏗️ Building frontend..."
