@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#F4F4F6" />
+    <!-- 这里是浏览器标签页显示的标题 -->
+    <title>Chengzi Space — Research & Alpha</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              bg: '#F4F4F6',
+              ink: '#000000',
+              ink2: 'rgba(0,0,0,0.72)',
+              card: 'rgba(255,255,255,0.85)',
+              accent: '#FF5AA8',
+              'accent-cyan': '#06B6D4',
+              'accent-violet': '#8B5CF6',
+            },
+            fontFamily: {
+              mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', '"Liberation Mono"', '"Courier New"', 'monospace'],
+              sans: ['ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', 'sans-serif'],
+            },
+            boxShadow: {
+              soft: '0 10px 40px -10px rgba(0,0,0,0.08)',
+              glow: '0 0 20px rgba(255, 90, 168, 0.3)',
+            },
+            borderWidth: {
+              3: '3px',
+            }
+          },
+        },
+      }
+    </script>
+    <style>
+      /* Custom Noise Grain */
+      .bg-grain {
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)' opacity='.08'/%3E%3C/svg%3E");
+      }
+      /* Custom Scrollbar */
+      ::-webkit-scrollbar {
+        width: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #F4F4F6;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #ccc;
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #bbb;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "lucide-react": "https://esm.sh/lucide-react@^0.561.0"
+  }
+}
+</script>
+<!-- Load ethers.js for wallet integration - using official CDN as primary, jsdelivr as fallback -->
+<script>
+  function loadEthers() {
+    // Try official ethers.io CDN first (most reliable)
+    const script = document.createElement('script');
+    script.src = 'https://cdn.ethers.io/lib/ethers-6.9.0.umd.min.js';
+    // Note: Not using integrity check to avoid hash mismatch issues
+    // The official CDN is trusted
+    script.crossOrigin = 'anonymous';
+    
+    script.onload = function() {
+      // Ensure ethers is available globally BEFORE logging
+      if (typeof ethers !== 'undefined' && typeof window !== 'undefined') {
+        window.ethers = ethers;
+        // Also set on globalThis for compatibility
+        globalThis.ethers = ethers;
+        console.log('✅ ethers.js loaded successfully from official CDN');
+      }
+      // Dispatch custom event to notify that ethers is loaded
+      window.dispatchEvent(new CustomEvent('ethersLoaded'));
+    };
+    
+    script.onerror = function() {
+      console.warn('Primary CDN failed, trying fallback...');
+      // Fallback to jsdelivr
+      const fallbackScript = document.createElement('script');
+      fallbackScript.src = 'https://cdn.jsdelivr.net/npm/ethers@6.9.0/dist/ethers.umd.min.js';
+      fallbackScript.crossOrigin = 'anonymous';
+      fallbackScript.onload = function() {
+        // Ensure ethers is available globally
+        if (typeof ethers !== 'undefined' && typeof window !== 'undefined') {
+          window.ethers = ethers;
+          // Also set on globalThis for compatibility
+          globalThis.ethers = ethers;
+          console.log('✅ ethers.js loaded successfully from fallback CDN');
+        }
+        // Dispatch custom event to notify that ethers is loaded
+        window.dispatchEvent(new CustomEvent('ethersLoaded'));
+      };
+      fallbackScript.onerror = function() {
+        console.error('❌ Failed to load ethers.js from all CDN sources');
+        // Try one more fallback - unpkg
+        const lastResortScript = document.createElement('script');
+        lastResortScript.src = 'https://unpkg.com/ethers@6.9.0/dist/ethers.umd.min.js';
+        lastResortScript.crossOrigin = 'anonymous';
+        lastResortScript.onload = function() {
+          if (typeof ethers !== 'undefined' && typeof window !== 'undefined') {
+            window.ethers = ethers;
+            globalThis.ethers = ethers;
+            console.log('✅ ethers.js loaded successfully from last resort CDN');
+            window.dispatchEvent(new CustomEvent('ethersLoaded'));
+          }
+        };
+        lastResortScript.onerror = function() {
+          console.error('❌ All CDN sources failed. Please check your internet connection.');
+        };
+        document.head.appendChild(lastResortScript);
+      };
+      document.head.appendChild(fallbackScript);
+    };
+    
+    document.head.appendChild(script);
+  }
+  
+  // Load ethers.js
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', loadEthers);
+  } else {
+    loadEthers();
+  }
+</script>
+<!-- Load x402 client library - will be copied to public folder -->
+<script src="/x402-client.js"></script>
+</head>
+  <body class="antialiased bg-bg text-ink font-sans overflow-x-hidden selection:bg-accent selection:text-white">
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>

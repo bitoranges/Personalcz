@@ -1,0 +1,32 @@
+{
+  "materials": [
+    {
+      "id": "m1",
+      "title": "chaojiwudi超级无敌资料",
+      "description": "Comprehensive analysis of liquidity cycles and BTC dominance metrics for the upcoming quarter.",
+      "type": "png",
+      "date": "2024-12-01",
+      "filename": "lostide.png",
+      "downloadPath": "materials/downloads/lostide.png"
+    },
+    {
+      "id": "m2",
+      "title": "High Conviction Alpha List",
+      "description": "Curated list of altcoin setups with entry/exit targets.",
+      "type": "link",
+      "date": "2024-12-10",
+      "url": "https://example.com/alpha-list"
+    },
+    {
+      "id": "m3",
+      "title": "Institutional On-Chain Toolkit",
+      "description": "Access to my personal dashboard configurations and data sources.",
+      "type": "archive",
+      "date": "2024-12-14",
+      "filename": "on-chain-toolkit.zip",
+      "downloadPath": "materials/downloads/on-chain-toolkit.zip"
+    }
+  ]
+}
+
+
