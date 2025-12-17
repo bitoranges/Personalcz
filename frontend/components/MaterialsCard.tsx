@@ -365,7 +365,9 @@ export const MaterialsCard: React.FC = () => {
       // CRITICAL: Store provider in x402Client BEFORE calling unlockContent
       // This ensures unlockContent uses the correct provider
       if (x402Client) {
+        // CRITICAL: Set rawProvider AFTER clearing it, to ensure fresh state
         x402Client.rawProvider = provider;
+        console.log('[MaterialsCard] Set rawProvider to:', provider === window.ethereum ? 'ethereum' : provider === window.BinanceChain ? 'BinanceChain' : 'other');
       }
       
       setSelectedWalletProvider(provider);

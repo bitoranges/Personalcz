@@ -714,8 +714,11 @@ class x402Client {
       // CRITICAL: Always set rawProvider when provider is provided
       // This ensures handlePaymentRequired uses the correct wallet
       if (provider) {
-        // Store raw provider for direct use in requestPayment and handlePaymentRequired
+        // CRITICAL: Store raw provider for direct use in requestPayment and handlePaymentRequired
+        // This MUST be set before any async operations to ensure correct wallet is used
+        console.log('[x402-client] unlockContent: Setting rawProvider:', provider === window.ethereum ? 'ethereum' : provider === window.BinanceChain ? 'BinanceChain' : 'other');
         this.rawProvider = provider;
+        
         // Also create ethers provider for network checks if needed
         try {
           this.provider = new ethers.BrowserProvider(provider);
@@ -735,10 +738,12 @@ class x402Client {
             const address = Array.isArray(accounts) ? accounts[0] : accounts;
             if (address) {
               this.walletAddress = address;
+              console.log('[x402-client] unlockContent: Got wallet address:', address);
             }
           }
         } catch (addressError) {
           // Continue - address will be obtained during payment
+          console.log('[x402-client] unlockContent: Address request failed (will get during payment):', addressError.message);
         }
       }
 

@@ -132,25 +132,11 @@ async function verifyPayment(paymentProof, walletAddress) {
     // Parse payment proof
     const proof = typeof paymentProof === 'string' ? JSON.parse(paymentProof) : paymentProof;
     
-    // #region agent log
-    const fs = require('fs');
-    const logPath = '/Users/ryan/Personalcz/.cursor/debug.log';
-    const logEntry = JSON.stringify({
-      location: 'server.js:130',
-      message: 'verifyPayment entry',
-      data: {
-        hasTransactionHash: !!proof?.transactionHash,
-        transactionHash: proof?.transactionHash,
-        walletAddress: walletAddress,
-        proofKeys: proof ? Object.keys(proof) : []
-      },
-      timestamp: Date.now(),
-      sessionId: 'debug-session',
-      runId: 'run1',
-      hypothesisId: 'C'
-    }) + '\n';
-    fs.appendFileSync(logPath, logEntry);
-    // #endregion
+    console.log('[verifyPayment] Entry:', {
+      hasTransactionHash: !!proof?.transactionHash,
+      transactionHash: proof?.transactionHash,
+      walletAddress: walletAddress
+    });
     
     if (!proof || !proof.transactionHash) {
       return { valid: false, reason: 'invalid_proof_format' };
@@ -221,37 +207,12 @@ async function verifyPayment(paymentProof, walletAddress) {
         }
       }
 
-      // #region agent log
-      const fs = require('fs');
-      const logPath = '/Users/ryan/Personalcz/.cursor/debug.log';
-      const logEntry = JSON.stringify({
-        location: 'server.js:204',
-        message: 'Transfer validation check',
-        data: {
-          validTransfer: validTransfer,
-          normalizedAddress: normalizedAddress,
-          receiverAddress: RECEIVER_ADDRESS.toLowerCase(),
-          transferLogsCount: transferLogs.length,
-          transferDetails: transferLogs.map(log => {
-            try {
-              const parsedLog = transferInterface.parseLog(log);
-              return {
-                from: parsedLog.args.from.toLowerCase(),
-                to: parsedLog.args.to.toLowerCase(),
-                amount: parsedLog.args.value.toString()
-              };
-            } catch {
-              return null;
-            }
-          }).filter(Boolean)
-        },
-        timestamp: Date.now(),
-        sessionId: 'debug-session',
-        runId: 'run1',
-        hypothesisId: 'C'
-      }) + '\n';
-      fs.appendFileSync(logPath, logEntry);
-      // #endregion
+      console.log('[verifyPayment] Transfer validation:', {
+        validTransfer,
+        normalizedAddress,
+        receiverAddress: RECEIVER_ADDRESS.toLowerCase(),
+        transferLogsCount: transferLogs.length
+      });
 
       if (!validTransfer) {
         return { valid: false, reason: 'transfer_does_not_match' };
@@ -374,27 +335,14 @@ app.post('/api/unlock', async (req, res) => {
     const walletAddress = extractWalletAddress(req);
     const paymentProof = req.headers['x-payment'] || req.body.paymentProof;
 
-    // #region agent log
-    const fs = require('fs');
-    const logPath = '/Users/ryan/Personalcz/.cursor/debug.log';
-    const logEntry = JSON.stringify({
-      location: 'server.js:320',
-      message: 'POST /api/unlock entry',
-      data: {
-        hasWalletAddress: !!walletAddress,
-        walletAddress: walletAddress,
-        hasHeaderPayment: !!req.headers['x-payment'],
-        hasBodyPayment: !!req.body.paymentProof,
-        paymentProofType: typeof paymentProof,
-        paymentProofPreview: typeof paymentProof === 'string' ? paymentProof.substring(0, 100) : JSON.stringify(paymentProof).substring(0, 100)
-      },
-      timestamp: Date.now(),
-      sessionId: 'debug-session',
-      runId: 'run1',
-      hypothesisId: 'C'
-    }) + '\n';
-    fs.appendFileSync(logPath, logEntry);
-    // #endregion
+    // Log for debugging (console only in production)
+    console.log('[POST /api/unlock] Entry:', {
+      hasWalletAddress: !!walletAddress,
+      walletAddress: walletAddress,
+      hasHeaderPayment: !!req.headers['x-payment'],
+      hasBodyPayment: !!req.body.paymentProof,
+      paymentProofType: typeof paymentProof
+    });
 
     if (!walletAddress) {
       return res.status(400).json({
@@ -436,23 +384,7 @@ app.post('/api/unlock', async (req, res) => {
       try {
         parsedProof = JSON.parse(paymentProof);
       } catch (parseError) {
-        // #region agent log
-        const fs = require('fs');
-        const logPath = '/Users/ryan/Personalcz/.cursor/debug.log';
-        const logEntry = JSON.stringify({
-          location: 'server.js:420',
-          message: 'Payment proof parse error',
-          data: {
-            error: parseError.message,
-            paymentProofPreview: paymentProof.substring(0, 200)
-          },
-          timestamp: Date.now(),
-          sessionId: 'debug-session',
-          runId: 'run1',
-          hypothesisId: 'C'
-        }) + '\n';
-        fs.appendFileSync(logPath, logEntry);
-        // #endregion
+        console.error('[POST /api/unlock] Payment proof parse error:', parseError.message);
         return res.status(400).json({
           success: false,
           error: 'Invalid payment proof format',
@@ -462,26 +394,17 @@ app.post('/api/unlock', async (req, res) => {
     }
 
     // Verify payment
+    console.log('[POST /api/unlock] Verifying payment for:', walletAddress);
     const verification = await verifyPayment(parsedProof, walletAddress);
 
-    // #region agent log
-    const logEntry2 = JSON.stringify({
-      location: 'server.js:350',
-      message: 'Payment verification result',
-      data: {
-        valid: verification.valid,
-        reason: verification.reason,
-        transactionHash: verification.transactionHash
-      },
-      timestamp: Date.now(),
-      sessionId: 'debug-session',
-      runId: 'run1',
-      hypothesisId: 'C'
-    }) + '\n';
-    fs.appendFileSync(logPath, logEntry2);
-    // #endregion
+    console.log('[POST /api/unlock] Verification result:', {
+      valid: verification.valid,
+      reason: verification.reason,
+      transactionHash: verification.transactionHash
+    });
 
     if (!verification.valid) {
+      console.error('[POST /api/unlock] Payment verification failed:', verification.reason);
       return res.status(402).json({
         success: false,
         error: 'Payment verification failed',
