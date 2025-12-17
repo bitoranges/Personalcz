@@ -15,13 +15,16 @@ RUN npm install --production=false --ignore-scripts
 WORKDIR /app/frontend
 RUN npm install --legacy-peer-deps
 
+# Copy frontend source files BEFORE building
+COPY frontend/ ./
+
 # Build frontend
 RUN npm run build
 
 # Back to root
 WORKDIR /app
 
-# Copy all remaining files
+# Copy all remaining files (server.js, etc.)
 COPY . .
 
 # Expose port
