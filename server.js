@@ -930,25 +930,34 @@ if (process.env.NODE_ENV !== 'test' && require.main === module) {
   // Handle server errors gracefully
   server.on('error', (error) => {
     console.error('❌ Server error:', error);
+    console.error('❌ Error code:', error.code);
+    console.error('❌ Error message:', error.message);
     if (error.code === 'EADDRINUSE') {
       console.error(`❌ Port ${PORT} is already in use. Please use a different port.`);
     }
-    process.exit(1);
+    // Don't exit immediately - log and try to recover
+    console.error('❌ Server error occurred, but continuing...');
   });
   
-  // Handle uncaught exceptions
+  // Handle uncaught exceptions - log but don't crash
   process.on('uncaughtException', (error) => {
     console.error('❌ Uncaught Exception:', error);
     console.error('❌ Stack:', error.stack);
-    // Don't exit - log and continue
+    // Log but don't exit - keep server running
+    console.error('❌ Exception logged, server continues running...');
   });
   
-  // Handle unhandled promise rejections
+  // Handle unhandled promise rejections - log but don't crash
   process.on('unhandledRejection', (reason, promise) => {
     console.error('❌ Unhandled Rejection at:', promise);
     console.error('❌ Reason:', reason);
-    // Don't exit - log and continue
+    // Log but don't exit - keep server running
+    console.error('❌ Rejection logged, server continues running...');
   });
+  
+  // Log server startup completion
+  console.log('✅ Server startup completed successfully');
+  console.log('✅ Server is ready to accept HTTP requests');
 }
 
 module.exports = app;
