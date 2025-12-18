@@ -336,52 +336,74 @@ function extractWalletAddress(req) {
 
 /**
  * Root endpoint - simple response to verify server is running
+ * This endpoint must respond quickly for Railway health checks
  */
 app.get('/', (req, res) => {
   try {
     // Try to serve frontend, but if it fails, return a simple response
     const indexPath = path.join(frontendBuildPath, 'index.html');
-    console.log('[GET /] Checking for index.html at:', indexPath);
-    console.log('[GET /] File exists:', fs.existsSync(indexPath));
     
     if (fs.existsSync(indexPath)) {
+      // Serve frontend file
       return res.sendFile(indexPath, (err) => {
         if (err) {
           console.error('[GET /] Error sending index.html:', err);
-          // Fallback to JSON response
-          res.json({
-            status: 'ok',
-            message: 'Server is running but frontend file could not be served',
-            error: err.message,
-            timestamp: new Date().toISOString(),
-            endpoints: {
-              health: '/health',
-              unlock: '/api/unlock',
-              paymentStatus: '/api/payment-status'
-            }
-          });
+          // If error sending file, return simple HTML response
+          res.status(200).send(`
+            <!DOCTYPE html>
+            <html>
+              <head>
+                <title>Server Running</title>
+                <meta charset="utf-8">
+              </head>
+              <body style="font-family: sans-serif; padding: 40px; max-width: 600px; margin: 0 auto;">
+                <h1>✅ Server is Running</h1>
+                <p>Frontend file could not be served, but the server is operational.</p>
+                <p><strong>Error:</strong> ${err.message}</p>
+                <hr>
+                <p><a href="/health">Health Check</a> | <a href="/api/unlock">API Unlock</a></p>
+              </body>
+            </html>
+          `);
         }
       });
     }
-    // Fallback response if frontend not built
-    res.json({
-      status: 'ok',
-      message: 'Server is running',
-      timestamp: new Date().toISOString(),
-      frontendPath: frontendBuildPath,
-      frontendExists: fs.existsSync(frontendBuildPath),
-      endpoints: {
-        health: '/health',
-        unlock: '/api/unlock',
-        paymentStatus: '/api/payment-status'
-      }
-    });
+    
+    // Fallback response if frontend not built - return HTML instead of JSON
+    res.status(200).send(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Server Running</title>
+          <meta charset="utf-8">
+        </head>
+        <body style="font-family: sans-serif; padding: 40px; max-width: 600px; margin: 0 auto;">
+          <h1>✅ Server is Running</h1>
+          <p>The server is operational, but the frontend build files are not found.</p>
+          <hr>
+          <p><strong>Frontend Path:</strong> ${frontendBuildPath}</p>
+          <p><strong>Frontend Exists:</strong> ${fs.existsSync(frontendBuildPath)}</p>
+          <hr>
+          <p><a href="/health">Health Check</a> | <a href="/api/unlock">API Unlock</a></p>
+        </body>
+      </html>
+    `);
   } catch (error) {
     console.error('[GET /] Error:', error);
-    res.status(500).json({
-      status: 'error',
-      message: error.message
-    });
+    // Return HTML error page instead of JSON
+    res.status(500).send(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Server Error</title>
+          <meta charset="utf-8">
+        </head>
+        <body style="font-family: sans-serif; padding: 40px;">
+          <h1>❌ Server Error</h1>
+          <p>${error.message}</p>
+        </body>
+      </html>
+    `);
   }
 });
 
