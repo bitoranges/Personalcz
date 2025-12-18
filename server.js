@@ -915,13 +915,23 @@ app.get('*', (req, res) => {
 
 // Only start server if not in test environment and if this file is run directly
 if (process.env.NODE_ENV !== 'test' && require.main === module) {
-  const server = app.listen(PORT, '0.0.0.0', () => {
+  console.log('🔧 Starting server...');
+  console.log('🔧 PORT:', PORT);
+  console.log('🔧 NODE_ENV:', process.env.NODE_ENV);
+  
+  const server = app.listen(PORT, '0.0.0.0', (err) => {
+    if (err) {
+      console.error('❌ Failed to start server:', err);
+      process.exit(1);
+    }
+    
     console.log(`🚀 x402 Payment Server running on port ${PORT}`);
     console.log(`📝 Payment: ${PAYMENT_AMOUNT} ${PAYMENT_CURRENCY} on ${PAYMENT_NETWORK}`);
     console.log(`🌐 Network: ${network}`);
     console.log(`💰 Receiver: ${RECEIVER_ADDRESS || 'Not configured'}`);
     console.log(`📍 USDC Contract: ${usdcAddress}`);
     console.log(`🌍 Server listening on: 0.0.0.0:${PORT}`);
+    console.log(`🌍 Server address: http://0.0.0.0:${PORT}`);
     
     if (!RECEIVER_ADDRESS) {
       console.warn('⚠️  WARNING: RECEIVER_ADDRESS not configured! Payments will fail.');
@@ -933,6 +943,13 @@ if (process.env.NODE_ENV !== 'test' && require.main === module) {
     
     // Log that server is ready
     console.log('✅ Server is ready to accept connections');
+    console.log('✅ Server startup completed successfully');
+    
+    // Test that server is actually listening
+    server.on('listening', () => {
+      const addr = server.address();
+      console.log('✅ Server is listening on:', addr);
+    });
   });
   
   // Handle server errors gracefully

@@ -4,7 +4,7 @@
   "description": "Personal website with x402 payment integration",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "node --trace-warnings server.js",
     "dev": "nodemon server.js",
     "dev:frontend": "cd frontend && npm run dev",
     "build": "cd frontend && npm run build",
