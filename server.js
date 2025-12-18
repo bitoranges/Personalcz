@@ -95,7 +95,20 @@ const network = process.env.NETWORK || 'base-mainnet';
 const usdcAddress = USDC_CONTRACT_ADDRESS[network] || USDC_CONTRACT_ADDRESS['base-mainnet'];
 
 // Initialize provider
-const provider = new ethers.JsonRpcProvider(BASE_RPC_URL);
+let provider = null;
+try {
+  if (RECEIVER_ADDRESS) {
+    provider = new ethers.JsonRpcProvider(BASE_RPC_URL);
+    console.log('✅ Connected to Base network:', BASE_RPC_URL);
+    console.log('✅ Receiver address:', RECEIVER_ADDRESS);
+  } else {
+    console.error('❌ RECEIVER_ADDRESS not set! Payment verification will fail.');
+    console.error('❌ Please set RECEIVER_ADDRESS environment variable in Railway.');
+  }
+} catch (error) {
+  console.error('❌ Failed to initialize provider:', error.message);
+  console.error('❌ Error stack:', error.stack);
+}
 
 // USDC ERC20 ABI (minimal - just transfer and balance functions)
 const USDC_ABI = [
@@ -152,9 +165,19 @@ async function verifyPayment(paymentProof, walletAddress) {
 
     // Verify transaction on-chain
     try {
+      if (!provider) {
+        console.error('[verifyPayment] Provider not initialized');
+        return { valid: false, reason: 'provider_not_initialized' };
+      }
+      
       const txReceipt = await provider.getTransactionReceipt(proof.transactionHash);
       
       if (!txReceipt || txReceipt.status !== 1) {
+        console.error('[verifyPayment] Transaction failed or not found:', {
+          hasReceipt: !!txReceipt,
+          status: txReceipt?.status,
+          transactionHash: proof.transactionHash
+        });
         return { valid: false, reason: 'transaction_failed_or_not_found' };
       }
 
@@ -318,11 +341,12 @@ app.get('/api/unlock', (req, res) => {
       paymentRequirements: paymentReqs,
     });
   } catch (error) {
-    console.error('Unlock GET error:', error);
+    console.error('[GET /api/unlock] Error:', error);
+    console.error('[GET /api/unlock] Error stack:', error.stack);
     res.status(500).json({
       success: false,
       error: 'Internal server error',
-      message: error.message,
+      message: process.env.NODE_ENV === 'production' ? 'An error occurred. Please check server logs.' : error.message,
     });
   }
 });
@@ -352,25 +376,12 @@ app.post('/api/unlock', async (req, res) => {
     }
 
     if (!paymentProof) {
-      // #region agent log
-      const fs = require('fs');
-      const logPath = '/Users/ryan/Personalcz/.cursor/debug.log';
-      const logEntry = JSON.stringify({
-        location: 'server.js:400',
-        message: 'Missing payment proof',
-        data: {
-          hasHeader: !!req.headers['x-payment'],
-          hasBody: !!req.body.paymentProof,
-          headersKeys: Object.keys(req.headers).filter(k => k.toLowerCase().includes('payment')),
-          bodyKeys: Object.keys(req.body || {})
-        },
-        timestamp: Date.now(),
-        sessionId: 'debug-session',
-        runId: 'run1',
-        hypothesisId: 'C'
-      }) + '\n';
-      fs.appendFileSync(logPath, logEntry);
-      // #endregion
+      console.error('[POST /api/unlock] Missing payment proof:', {
+        hasHeader: !!req.headers['x-payment'],
+        hasBody: !!req.body.paymentProof,
+        headersKeys: Object.keys(req.headers).filter(k => k.toLowerCase().includes('payment')),
+        bodyKeys: Object.keys(req.body || {})
+      });
       return res.status(400).json({
         success: false,
         error: 'Payment proof is required',
@@ -562,11 +573,12 @@ app.get('/api/download/:materialId', (req, res) => {
     // Log download
     console.log(`File downloaded: ${filename} by ${walletAddress}`);
   } catch (error) {
-    console.error('Download error:', error);
+    console.error('[GET /api/download] Error:', error);
+    console.error('[GET /api/download] Error stack:', error.stack);
     res.status(500).json({
       success: false,
       error: 'Internal server error',
-      message: error.message,
+      message: process.env.NODE_ENV === 'production' ? 'An error occurred. Please check server logs.' : error.message,
     });
   }
 });
@@ -645,11 +657,12 @@ app.post('/api/admin/upload', express.raw({ type: '*/*', limit: '100mb' }), (req
       filePath: `materials/downloads/${filename}`,
     });
   } catch (error) {
-    console.error('Upload error:', error);
+    console.error('[POST /api/admin/upload] Error:', error);
+    console.error('[POST /api/admin/upload] Error stack:', error.stack);
     res.status(500).json({
       success: false,
       error: 'Internal server error',
-      message: error.message,
+      message: process.env.NODE_ENV === 'production' ? 'An error occurred. Please check server logs.' : error.message,
     });
   }
 });

@@ -41,3 +41,5 @@ curl -X POST "$RAILWAY_URL/api/admin/upload" \
 
 echo ""
 echo "✅ 上传完成！"
+
+
