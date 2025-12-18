@@ -123,24 +123,32 @@ const USDC_CONTRACT_ADDRESS = {
 const network = process.env.NETWORK || 'base-mainnet';
 const usdcAddress = USDC_CONTRACT_ADDRESS[network] || USDC_CONTRACT_ADDRESS['base-mainnet'];
 
-// Initialize provider
+// Initialize provider (non-blocking, async initialization)
 let provider = null;
-try {
-  if (RECEIVER_ADDRESS) {
-    provider = new ethers.JsonRpcProvider(BASE_RPC_URL);
-    console.log('✅ Connected to Base network:', BASE_RPC_URL);
-    console.log('✅ Receiver address:', RECEIVER_ADDRESS);
-  } else {
-    console.warn('⚠️ RECEIVER_ADDRESS not set! Payment verification will fail.');
-    console.warn('⚠️ Please set RECEIVER_ADDRESS environment variable in Railway.');
-    // Don't throw - allow server to start even without RECEIVER_ADDRESS
+
+// Initialize provider asynchronously to avoid blocking server startup
+(async () => {
+  try {
+    if (RECEIVER_ADDRESS) {
+      provider = new ethers.JsonRpcProvider(BASE_RPC_URL);
+      // Test connection (non-blocking)
+      provider.getNetwork().then(() => {
+        console.log('✅ Connected to Base network:', BASE_RPC_URL);
+        console.log('✅ Receiver address:', RECEIVER_ADDRESS);
+      }).catch((err) => {
+        console.warn('⚠️ Provider connection test failed (non-critical):', err.message);
+        // Provider still created, just connection test failed
+      });
+    } else {
+      console.warn('⚠️ RECEIVER_ADDRESS not set! Payment verification will fail.');
+      console.warn('⚠️ Please set RECEIVER_ADDRESS environment variable in Railway.');
+    }
+  } catch (error) {
+    console.error('❌ Failed to initialize provider:', error.message);
+    console.error('❌ Error stack:', error.stack);
+    // Don't throw - allow server to start even if provider fails
   }
-} catch (error) {
-  console.error('❌ Failed to initialize provider:', error.message);
-  console.error('❌ Error stack:', error.stack);
-  // Don't throw - allow server to start even if provider fails
-  // Payment endpoints will handle this gracefully
-}
+})();
 
 // USDC ERC20 ABI (minimal - just transfer and balance functions)
 const USDC_ABI = [
