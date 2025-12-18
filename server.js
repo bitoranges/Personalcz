@@ -102,12 +102,15 @@ try {
     console.log('✅ Connected to Base network:', BASE_RPC_URL);
     console.log('✅ Receiver address:', RECEIVER_ADDRESS);
   } else {
-    console.error('❌ RECEIVER_ADDRESS not set! Payment verification will fail.');
-    console.error('❌ Please set RECEIVER_ADDRESS environment variable in Railway.');
+    console.warn('⚠️ RECEIVER_ADDRESS not set! Payment verification will fail.');
+    console.warn('⚠️ Please set RECEIVER_ADDRESS environment variable in Railway.');
+    // Don't throw - allow server to start even without RECEIVER_ADDRESS
   }
 } catch (error) {
   console.error('❌ Failed to initialize provider:', error.message);
   console.error('❌ Error stack:', error.stack);
+  // Don't throw - allow server to start even if provider fails
+  // Payment endpoints will handle this gracefully
 }
 
 // USDC ERC20 ABI (minimal - just transfer and balance functions)
@@ -748,7 +751,7 @@ app.get('*', (req, res) => {
 
 // Only start server if not in test environment and if this file is run directly
 if (process.env.NODE_ENV !== 'test' && require.main === module) {
-  app.listen(PORT, () => {
+  const server = app.listen(PORT, () => {
     console.log(`🚀 x402 Payment Server running on port ${PORT}`);
     console.log(`📝 Payment: ${PAYMENT_AMOUNT} ${PAYMENT_CURRENCY} on ${PAYMENT_NETWORK}`);
     console.log(`🌐 Network: ${network}`);
@@ -758,6 +761,33 @@ if (process.env.NODE_ENV !== 'test' && require.main === module) {
     if (!RECEIVER_ADDRESS) {
       console.warn('⚠️  WARNING: RECEIVER_ADDRESS not configured! Payments will fail.');
     }
+    
+    if (!provider) {
+      console.warn('⚠️  WARNING: Provider not initialized! Payment verification will fail.');
+    }
+  });
+  
+  // Handle server errors gracefully
+  server.on('error', (error) => {
+    console.error('❌ Server error:', error);
+    if (error.code === 'EADDRINUSE') {
+      console.error(`❌ Port ${PORT} is already in use. Please use a different port.`);
+    }
+    process.exit(1);
+  });
+  
+  // Handle uncaught exceptions
+  process.on('uncaughtException', (error) => {
+    console.error('❌ Uncaught Exception:', error);
+    console.error('❌ Stack:', error.stack);
+    // Don't exit - log and continue
+  });
+  
+  // Handle unhandled promise rejections
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error('❌ Unhandled Rejection at:', promise);
+    console.error('❌ Reason:', reason);
+    // Don't exit - log and continue
   });
 }
 
