@@ -47,10 +47,31 @@ if (fs.existsSync(frontendBuildPath)) {
 }
 
 // Serve x402-client.js from public directory
-app.use('/x402-client.js', express.static(path.join(__dirname, 'frontend', 'public', 'x402-client.js')));
+// CRITICAL: Handle file system operations gracefully to avoid blocking startup
+try {
+  const x402ClientPath = path.join(__dirname, 'frontend', 'public', 'x402-client.js');
+  if (fs.existsSync(x402ClientPath)) {
+    app.use('/x402-client.js', express.static(x402ClientPath));
+    console.log('✅ Serving x402-client.js from:', x402ClientPath);
+  } else {
+    console.warn('⚠️ x402-client.js not found:', x402ClientPath);
+  }
+} catch (fsError) {
+  console.error('❌ Error setting up x402-client.js serving:', fsError);
+}
 
 // Serve avatar image
-app.use('/assets', express.static(path.join(__dirname, 'frontend', 'assets')));
+try {
+  const assetsPath = path.join(__dirname, 'frontend', 'assets');
+  if (fs.existsSync(assetsPath)) {
+    app.use('/assets', express.static(assetsPath));
+    console.log('✅ Serving assets from:', assetsPath);
+  } else {
+    console.warn('⚠️ Assets directory not found:', assetsPath);
+  }
+} catch (fsError) {
+  console.error('❌ Error setting up assets serving:', fsError);
+}
 
 // Load materials configuration
 const materialsConfigPath = path.join(__dirname, 'materials-config.json');
