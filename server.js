@@ -957,12 +957,10 @@ if (process.env.NODE_ENV !== 'test' && require.main === module) {
   console.log('🔧 PORT:', PORT);
   console.log('🔧 NODE_ENV:', process.env.NODE_ENV);
   
-  const server = app.listen(PORT, '0.0.0.0', (err) => {
-    if (err) {
-      console.error('❌ Failed to start server:', err);
-      process.exit(1);
-    }
-    
+  // CRITICAL: Express app.listen callback does NOT take an error parameter
+  // The callback is called when the server starts listening, not on error
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    const addr = server.address();
     console.log(`🚀 x402 Payment Server running on port ${PORT}`);
     console.log(`📝 Payment: ${PAYMENT_AMOUNT} ${PAYMENT_CURRENCY} on ${PAYMENT_NETWORK}`);
     console.log(`🌐 Network: ${network}`);
@@ -970,6 +968,7 @@ if (process.env.NODE_ENV !== 'test' && require.main === module) {
     console.log(`📍 USDC Contract: ${usdcAddress}`);
     console.log(`🌍 Server listening on: 0.0.0.0:${PORT}`);
     console.log(`🌍 Server address: http://0.0.0.0:${PORT}`);
+    console.log(`🌍 Server address details:`, addr);
     
     if (!RECEIVER_ADDRESS) {
       console.warn('⚠️  WARNING: RECEIVER_ADDRESS not configured! Payments will fail.');
@@ -982,12 +981,7 @@ if (process.env.NODE_ENV !== 'test' && require.main === module) {
     // Log that server is ready
     console.log('✅ Server is ready to accept connections');
     console.log('✅ Server startup completed successfully');
-    
-    // Test that server is actually listening
-    server.on('listening', () => {
-      const addr = server.address();
-      console.log('✅ Server is listening on:', addr);
-    });
+    console.log('✅ Server is ready to accept HTTP requests');
   });
   
   // Handle server errors gracefully
