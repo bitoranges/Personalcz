@@ -4,13 +4,24 @@
  * Verifies on-chain USDC payments on Base network
  */
 
+// Load environment variables first
 require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
-const path = require('path');
-const fs = require('fs');
-const crypto = require('crypto');
-const { ethers } = require('ethers');
+
+// Import dependencies with error handling
+let express, cors, path, fs, crypto, ethers;
+
+try {
+  express = require('express');
+  cors = require('cors');
+  path = require('path');
+  fs = require('fs');
+  crypto = require('crypto');
+  ethers = require('ethers');
+} catch (error) {
+  console.error('❌ Failed to load dependencies:', error.message);
+  console.error('❌ Please run: npm install');
+  process.exit(1);
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -34,10 +45,16 @@ const materialsConfigPath = path.join(__dirname, 'materials-config.json');
 let materialsConfig = { materials: [] };
 try {
   if (fs.existsSync(materialsConfigPath)) {
-    materialsConfig = JSON.parse(fs.readFileSync(materialsConfigPath, 'utf8'));
+    const configContent = fs.readFileSync(materialsConfigPath, 'utf8');
+    materialsConfig = JSON.parse(configContent);
+    console.log(`✅ Loaded ${materialsConfig.materials.length} materials from config`);
+  } else {
+    console.warn('⚠️ materials-config.json not found, using empty config');
   }
 } catch (error) {
-  console.error('Error loading materials config:', error);
+  console.error('❌ Error loading materials config:', error.message);
+  console.error('❌ Using empty config as fallback');
+  materialsConfig = { materials: [] };
 }
 
 /**
@@ -306,15 +323,46 @@ function extractWalletAddress(req) {
 // Routes
 
 /**
+ * Root endpoint - simple response to verify server is running
+ */
+app.get('/', (req, res) => {
+  // Try to serve frontend, but if it fails, return a simple response
+  const indexPath = path.join(frontendBuildPath, 'index.html');
+  if (fs.existsSync(indexPath)) {
+    return res.sendFile(indexPath);
+  }
+  // Fallback response if frontend not built
+  res.json({
+    status: 'ok',
+    message: 'Server is running',
+    timestamp: new Date().toISOString(),
+    endpoints: {
+      health: '/health',
+      unlock: '/api/unlock',
+      paymentStatus: '/api/payment-status'
+    }
+  });
+});
+
+/**
  * Health check endpoint
  */
 app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
-    timestamp: new Date().toISOString(),
-    network,
-    receiverAddress: RECEIVER_ADDRESS || 'Not configured',
-  });
+  try {
+    res.json({ 
+      status: 'ok', 
+      timestamp: new Date().toISOString(),
+      network,
+      receiverAddress: RECEIVER_ADDRESS || 'Not configured',
+      provider: provider ? 'initialized' : 'not initialized',
+    });
+  } catch (error) {
+    console.error('[GET /health] Error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: error.message
+    });
+  }
 });
 
 /**
@@ -720,33 +768,73 @@ function getContentType(type) {
 // Catch-all handler: send back React's index.html file for client-side routing
 // This must be after all API routes
 app.get('*', (req, res) => {
-  // Skip API routes
-  if (req.path.startsWith('/api')) {
-    return res.status(404).json({ error: 'API endpoint not found' });
-  }
-  
-  // Serve index.html for all other routes (React Router)
-  const indexPath = path.join(frontendBuildPath, 'index.html');
-  res.sendFile(indexPath, (err) => {
-    if (err) {
-      // If frontend build doesn't exist, serve a simple message
-      if (err.code === 'ENOENT') {
-        res.status(404).send(`
-          <html>
-            <body style="font-family: sans-serif; padding: 40px;">
-              <h1>Frontend not built</h1>
-              <p>Please build the frontend first:</p>
-              <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px;">cd frontend && npm install && npm run build</pre>
-              <p>Or run in development mode:</p>
-              <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px;">npm run dev:frontend</pre>
-            </body>
-          </html>
-        `);
-      } else {
-        res.status(500).send('Error loading frontend');
-      }
+  try {
+    // Skip API routes
+    if (req.path.startsWith('/api')) {
+      return res.status(404).json({ error: 'API endpoint not found' });
     }
-  });
+    
+    // Serve index.html for all other routes (React Router)
+    const indexPath = path.join(frontendBuildPath, 'index.html');
+    
+    // Check if file exists before trying to send it
+    if (!fs.existsSync(indexPath)) {
+      return res.status(404).send(`
+        <html>
+          <head><title>Frontend Not Built</title></head>
+          <body style="font-family: sans-serif; padding: 40px; max-width: 600px; margin: 0 auto;">
+            <h1>Frontend not built</h1>
+            <p>The frontend build files are missing. Please build the frontend first:</p>
+            <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto;">cd frontend && npm install && npm run build</pre>
+            <p>Or run in development mode:</p>
+            <pre style="background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto;">npm run dev:frontend</pre>
+            <hr>
+            <p><strong>Server Status:</strong> ✅ Running</p>
+            <p><strong>API Endpoints:</strong></p>
+            <ul>
+              <li><a href="/health">/health</a> - Health check</li>
+              <li><a href="/api/unlock">/api/unlock</a> - Unlock endpoint</li>
+            </ul>
+          </body>
+        </html>
+      `);
+    }
+    
+    res.sendFile(indexPath, (err) => {
+      if (err) {
+        console.error('[GET *] Error sending index.html:', err);
+        if (err.code === 'ENOENT') {
+          res.status(404).send(`
+            <html>
+              <head><title>404 - Not Found</title></head>
+              <body style="font-family: sans-serif; padding: 40px;">
+                <h1>404 - Page Not Found</h1>
+                <p>The requested page could not be found.</p>
+                <p><a href="/">Go to homepage</a></p>
+              </body>
+            </html>
+          `);
+        } else {
+          res.status(500).send(`
+            <html>
+              <head><title>500 - Server Error</title></head>
+              <body style="font-family: sans-serif; padding: 40px;">
+                <h1>500 - Server Error</h1>
+                <p>An error occurred while loading the page.</p>
+                <p><a href="/">Go to homepage</a></p>
+              </body>
+            </html>
+          `);
+        }
+      }
+    });
+  } catch (error) {
+    console.error('[GET *] Unexpected error:', error);
+    res.status(500).json({
+      error: 'Internal server error',
+      message: error.message
+    });
+  }
 });
 
 // Only start server if not in test environment and if this file is run directly
