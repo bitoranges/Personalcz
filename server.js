@@ -387,16 +387,21 @@ app.get('/', (req, res) => {
 
 /**
  * Health check endpoint
+ * Railway uses this to check if the app is healthy
  */
 app.get('/health', (req, res) => {
   try {
-    res.json({ 
+    const healthData = { 
       status: 'ok', 
       timestamp: new Date().toISOString(),
       network,
       receiverAddress: RECEIVER_ADDRESS || 'Not configured',
       provider: provider ? 'initialized' : 'not initialized',
-    });
+      frontendPath: frontendBuildPath,
+      frontendExists: fs.existsSync(frontendBuildPath),
+    };
+    console.log('[GET /health] Health check:', healthData);
+    res.json(healthData);
   } catch (error) {
     console.error('[GET /health] Error:', error);
     res.status(500).json({
@@ -880,12 +885,13 @@ app.get('*', (req, res) => {
 
 // Only start server if not in test environment and if this file is run directly
 if (process.env.NODE_ENV !== 'test' && require.main === module) {
-  const server = app.listen(PORT, () => {
+  const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 x402 Payment Server running on port ${PORT}`);
     console.log(`📝 Payment: ${PAYMENT_AMOUNT} ${PAYMENT_CURRENCY} on ${PAYMENT_NETWORK}`);
     console.log(`🌐 Network: ${network}`);
     console.log(`💰 Receiver: ${RECEIVER_ADDRESS || 'Not configured'}`);
     console.log(`📍 USDC Contract: ${usdcAddress}`);
+    console.log(`🌍 Server listening on: 0.0.0.0:${PORT}`);
     
     if (!RECEIVER_ADDRESS) {
       console.warn('⚠️  WARNING: RECEIVER_ADDRESS not configured! Payments will fail.');
@@ -894,6 +900,9 @@ if (process.env.NODE_ENV !== 'test' && require.main === module) {
     if (!provider) {
       console.warn('⚠️  WARNING: Provider not initialized! Payment verification will fail.');
     }
+    
+    // Log that server is ready
+    console.log('✅ Server is ready to accept connections');
   });
   
   // Handle server errors gracefully
