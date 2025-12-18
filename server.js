@@ -699,11 +699,20 @@ app.get('/api/download/:materialId', (req, res) => {
     const filePath = path.join(__dirname, material.downloadPath);
 
     // Check if file exists
-    if (!fs.existsSync(filePath)) {
-      console.error(`File not found: ${filePath}`);
-      return res.status(404).json({
+    // CRITICAL: Handle Volume mount gracefully - file may be on Volume
+    try {
+      if (!fs.existsSync(filePath)) {
+        console.error(`[GET /api/download] File not found: ${filePath}`);
+        return res.status(404).json({
+          success: false,
+          error: 'File not found on server. Please contact administrator.',
+        });
+      }
+    } catch (fsError) {
+      console.error('[GET /api/download] Error checking file existence:', fsError);
+      return res.status(500).json({
         success: false,
-        error: 'File not found on server. Please contact administrator.',
+        error: 'File system error. Please check server logs.',
       });
     }
 
@@ -763,9 +772,17 @@ app.post('/api/admin/upload', express.raw({ type: '*/*', limit: '100mb' }), (req
     }
 
     // Create materials directory if it doesn't exist
+    // CRITICAL: Handle Volume mount gracefully - Volume may be mounted at /app/materials
     const materialsDir = path.join(__dirname, 'materials', 'downloads');
-    if (!fs.existsSync(materialsDir)) {
-      fs.mkdirSync(materialsDir, { recursive: true });
+    try {
+      if (!fs.existsSync(materialsDir)) {
+        fs.mkdirSync(materialsDir, { recursive: true });
+        console.log('[POST /api/admin/upload] Created materials directory:', materialsDir);
+      }
+    } catch (dirError) {
+      console.error('[POST /api/admin/upload] Error creating materials directory:', dirError);
+      // If directory creation fails (e.g., Volume mount issue), continue anyway
+      // The file write will fail later if there's a real problem
     }
 
     // Save file
