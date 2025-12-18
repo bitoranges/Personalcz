@@ -320,6 +320,17 @@ app.get('/health', (req, res) => {
  */
 app.get('/api/unlock', (req, res) => {
   try {
+    // CRITICAL: Check RECEIVER_ADDRESS first before any operations
+    if (!RECEIVER_ADDRESS) {
+      console.error('[GET /api/unlock] RECEIVER_ADDRESS not configured!');
+      return res.status(500).json({
+        success: false,
+        error: 'Server configuration error',
+        message: 'Payment receiver address not configured. Please contact administrator.',
+        details: process.env.NODE_ENV === 'production' ? undefined : 'RECEIVER_ADDRESS environment variable is not set in Railway.',
+      });
+    }
+
     const walletAddress = extractWalletAddress(req);
     
     // Check if user already has access
@@ -344,6 +355,17 @@ app.get('/api/unlock', (req, res) => {
   } catch (error) {
     console.error('[GET /api/unlock] Error:', error);
     console.error('[GET /api/unlock] Error stack:', error.stack);
+    
+    // Check if error is related to RECEIVER_ADDRESS
+    if (error.message && error.message.includes('RECEIVER_ADDRESS')) {
+      return res.status(500).json({
+        success: false,
+        error: 'Server configuration error',
+        message: 'Payment receiver address not configured. Please contact administrator.',
+        details: process.env.NODE_ENV === 'production' ? undefined : error.message,
+      });
+    }
+    
     res.status(500).json({
       success: false,
       error: 'Internal server error',
