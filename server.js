@@ -989,12 +989,22 @@ if (process.env.NODE_ENV !== 'test' && require.main === module) {
     console.error('❌ Server error:', error);
     console.error('❌ Error code:', error.code);
     console.error('❌ Error message:', error.message);
+    console.error('❌ Error stack:', error.stack);
     if (error.code === 'EADDRINUSE') {
       console.error(`❌ Port ${PORT} is already in use. Please use a different port.`);
+      process.exit(1);
     }
-    // Don't exit immediately - log and try to recover
+    // For other errors, log but don't exit - server might recover
     console.error('❌ Server error occurred, but continuing...');
   });
+  
+  // CRITICAL: Set keepAlive timeout to prevent connection issues
+  server.keepAliveTimeout = 65000; // 65 seconds (Railway default is 60s)
+  server.headersTimeout = 66000; // 66 seconds (must be > keepAliveTimeout)
+  
+  // Log server configuration
+  console.log('🔧 Server keepAliveTimeout:', server.keepAliveTimeout);
+  console.log('🔧 Server headersTimeout:', server.headersTimeout);
   
   // Handle uncaught exceptions - log but don't crash
   process.on('uncaughtException', (error) => {
