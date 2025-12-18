@@ -123,7 +123,8 @@ const USDC_ABI = [
  */
 function generatePaymentRequirements() {
   if (!RECEIVER_ADDRESS) {
-    throw new Error('RECEIVER_ADDRESS not configured');
+    console.error('❌ RECEIVER_ADDRESS not configured! Cannot generate payment requirements.');
+    throw new Error('RECEIVER_ADDRESS not configured. Please set RECEIVER_ADDRESS environment variable.');
   }
 
   return {
