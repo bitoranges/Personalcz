@@ -32,7 +32,19 @@ app.use(express.json());
 
 // Serve static files from frontend build directory
 const frontendBuildPath = path.join(__dirname, 'frontend', 'dist');
-app.use(express.static(frontendBuildPath));
+
+// Log frontend build path for debugging
+console.log('📁 Frontend build path:', frontendBuildPath);
+console.log('📁 Frontend build exists:', fs.existsSync(frontendBuildPath));
+
+// Serve static files from frontend build directory
+if (fs.existsSync(frontendBuildPath)) {
+  app.use(express.static(frontendBuildPath));
+  console.log('✅ Serving static files from:', frontendBuildPath);
+} else {
+  console.warn('⚠️ Frontend build directory not found:', frontendBuildPath);
+  console.warn('⚠️ Frontend files will not be served. Please build the frontend first.');
+}
 
 // Serve x402-client.js from public directory
 app.use('/x402-client.js', express.static(path.join(__dirname, 'frontend', 'public', 'x402-client.js')));
@@ -326,22 +338,51 @@ function extractWalletAddress(req) {
  * Root endpoint - simple response to verify server is running
  */
 app.get('/', (req, res) => {
-  // Try to serve frontend, but if it fails, return a simple response
-  const indexPath = path.join(frontendBuildPath, 'index.html');
-  if (fs.existsSync(indexPath)) {
-    return res.sendFile(indexPath);
-  }
-  // Fallback response if frontend not built
-  res.json({
-    status: 'ok',
-    message: 'Server is running',
-    timestamp: new Date().toISOString(),
-    endpoints: {
-      health: '/health',
-      unlock: '/api/unlock',
-      paymentStatus: '/api/payment-status'
+  try {
+    // Try to serve frontend, but if it fails, return a simple response
+    const indexPath = path.join(frontendBuildPath, 'index.html');
+    console.log('[GET /] Checking for index.html at:', indexPath);
+    console.log('[GET /] File exists:', fs.existsSync(indexPath));
+    
+    if (fs.existsSync(indexPath)) {
+      return res.sendFile(indexPath, (err) => {
+        if (err) {
+          console.error('[GET /] Error sending index.html:', err);
+          // Fallback to JSON response
+          res.json({
+            status: 'ok',
+            message: 'Server is running but frontend file could not be served',
+            error: err.message,
+            timestamp: new Date().toISOString(),
+            endpoints: {
+              health: '/health',
+              unlock: '/api/unlock',
+              paymentStatus: '/api/payment-status'
+            }
+          });
+        }
+      });
     }
-  });
+    // Fallback response if frontend not built
+    res.json({
+      status: 'ok',
+      message: 'Server is running',
+      timestamp: new Date().toISOString(),
+      frontendPath: frontendBuildPath,
+      frontendExists: fs.existsSync(frontendBuildPath),
+      endpoints: {
+        health: '/health',
+        unlock: '/api/unlock',
+        paymentStatus: '/api/payment-status'
+      }
+    });
+  } catch (error) {
+    console.error('[GET /] Error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: error.message
+    });
+  }
 });
 
 /**
