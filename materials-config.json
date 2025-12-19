@@ -2,20 +2,21 @@
   "materials": [
     {
       "id": "m1",
-      "title": "chaojiwudi超级无敌资料",
-      "description": "Comprehensive analysis of liquidity cycles and BTC dominance metrics for the upcoming quarter.",
-      "type": "png",
-      "date": "2024-12-01",
-      "filename": "lostide.png",
-      "downloadPath": "materials/downloads/lostide.png"
+      "title": "VibeCoding 学习指南",
+      "description": "AI入门基础学习资料",
+      "type": "pdf",
+      "date": "2024-12-15",
+      "filename": "vibecoding2.pdf",
+      "downloadPath": "materials/vibecoding2.pdf",
+      "storageType": "r2"
     },
     {
       "id": "m2",
-      "title": "High Conviction Alpha List",
-      "description": "Curated list of altcoin setups with entry/exit targets.",
+      "title": "AI 大师进化手册:从工具堆栈(Vibe Stack)到“氛围编程”(Vibe Coding)的全能指南",
+      "description": "这个视频不仅是在教你如何“用”AI,而是在教你如何“指挥”AI。",
       "type": "link",
-      "date": "2024-12-10",
-      "url": "https://example.com/alpha-list"
+      "date": "2025-12-18",
+      "url": "https://www.youtube.com/watch?v=2itM7IdThvA"
     },
     {
       "id": "m3",
