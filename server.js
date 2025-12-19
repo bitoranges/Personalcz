@@ -1031,17 +1031,13 @@ if (process.env.NODE_ENV !== 'test' && require.main === module) {
     console.log('✅ Server is ready to accept HTTP requests');
   });
   
-  // Handle server errors gracefully
+  // Note: Server listen errors are handled above, this is for runtime errors
   server.on('error', (error) => {
-    console.error('❌ Server error:', error);
+    console.error('❌ Server runtime error:', error);
     console.error('❌ Error code:', error.code);
     console.error('❌ Error message:', error.message);
     console.error('❌ Error stack:', error.stack);
-    if (error.code === 'EADDRINUSE') {
-      console.error(`❌ Port ${PORT} is already in use. Please use a different port.`);
-      process.exit(1);
-    }
-    // For other errors, log but don't exit - server might recover
+    // Don't exit on runtime errors - server might recover
     console.error('❌ Server error occurred, but continuing...');
   });
   
