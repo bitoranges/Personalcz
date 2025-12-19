@@ -35,12 +35,28 @@ const frontendBuildPath = path.join(__dirname, 'frontend', 'dist');
 
 // Log frontend build path for debugging
 console.log('📁 Frontend build path:', frontendBuildPath);
-console.log('📁 Frontend build exists:', fs.existsSync(frontendBuildPath));
+
+// CRITICAL: Check file system operations gracefully to avoid blocking startup
+// Volume mount may cause file system operations to hang or fail
+let frontendBuildExists = false;
+try {
+  frontendBuildExists = fs.existsSync(frontendBuildPath);
+  console.log('📁 Frontend build exists:', frontendBuildExists);
+} catch (fsError) {
+  console.error('❌ Error checking frontend build path:', fsError);
+  console.warn('⚠️ Assuming frontend build does not exist due to file system error');
+  frontendBuildExists = false;
+}
 
 // Serve static files from frontend build directory
-if (fs.existsSync(frontendBuildPath)) {
-  app.use(express.static(frontendBuildPath));
-  console.log('✅ Serving static files from:', frontendBuildPath);
+if (frontendBuildExists) {
+  try {
+    app.use(express.static(frontendBuildPath));
+    console.log('✅ Serving static files from:', frontendBuildPath);
+  } catch (staticError) {
+    console.error('❌ Error setting up static file serving:', staticError);
+    console.warn('⚠️ Static file serving disabled due to error');
+  }
 } else {
   console.warn('⚠️ Frontend build directory not found:', frontendBuildPath);
   console.warn('⚠️ Frontend files will not be served. Please build the frontend first.');
