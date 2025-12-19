@@ -344,44 +344,19 @@ export const MaterialsCard: React.FC = () => {
         
       } else {
         // EIP-6963 wallet - find provider by EXACT UUID match
+        // CRITICAL: Trust EIP-6963 detection - it's the most reliable method
+        // The provider from EIP-6963 is guaranteed to be correct for that wallet
         
         try {
           provider = await findEIP6963Provider(wallet.uuid);
           
-          // CRITICAL: Verify the provider matches the selected wallet
-          // Do NOT fallback to window.ethereum for EIP-6963 wallets - it might be the wrong wallet!
           if (!provider) {
             throw new Error(`Failed to find provider for ${wallet.name}. Please ensure the wallet is installed and unlocked.`);
           }
           
-          // CRITICAL: Additional verification for MetaMask to prevent Binance confusion
-          if (wallet.name === 'MetaMask' || wallet.rdns === 'io.metamask') {
-            // Verify it's actually MetaMask, not Binance
-            const ethereum = (window as any).ethereum;
-            if (provider === ethereum) {
-              // Check if it's actually MetaMask
-              if (!ethereum.isMetaMask || ethereum.isBraveWallet) {
-                throw new Error('MetaMask not found. Detected a different wallet instead.');
-              }
-              // Double-check: ensure it's not Binance masquerading as MetaMask
-              if ((window as any).BinanceChain && ethereum === (window as any).BinanceChain) {
-                throw new Error('MetaMask not found. Detected Binance Wallet instead.');
-              }
-            }
-          }
-          
-          // CRITICAL: Additional verification for Binance to prevent MetaMask confusion
-          if (wallet.name === 'Binance Wallet' || wallet.rdns === 'com.binance.wallet') {
-            // Verify it's actually Binance, not MetaMask
-            const binanceChain = (window as any).BinanceChain;
-            if (provider !== binanceChain) {
-              // If provider is window.ethereum, it might be MetaMask, not Binance
-              const ethereum = (window as any).ethereum;
-              if (provider === ethereum && ethereum.isMetaMask) {
-                throw new Error('Binance Wallet not found. Detected MetaMask instead.');
-              }
-            }
-          }
+          // For EIP-6963 wallets, we trust the provider from the event
+          // No additional verification needed - EIP-6963 is the source of truth
+          console.log(`[MaterialsCard] EIP-6963 provider found for ${wallet.name} (UUID: ${wallet.uuid})`);
         } catch (findError) {
           throw new Error(`Failed to connect to ${wallet.name}: ${findError.message}`);
         }
@@ -534,6 +509,7 @@ export const MaterialsCard: React.FC = () => {
   };
 
   // Helper function to find EIP-6963 provider by EXACT UUID match
+  // CRITICAL: Trust EIP-6963 - it provides the correct provider for each wallet
   const findEIP6963Provider = (uuid: string): Promise<any> => {
     return new Promise((resolve, reject) => {
       let provider = null;
@@ -550,6 +526,7 @@ export const MaterialsCard: React.FC = () => {
           provider = eventProvider;
           walletInfo = eventInfo;
           matchedUuids.push(eventUuid);
+          console.log(`[findEIP6963Provider] Found provider for UUID ${uuid}, wallet: ${eventInfo?.name}, rdns: ${eventInfo?.rdns}`);
         }
       };
 
@@ -560,31 +537,10 @@ export const MaterialsCard: React.FC = () => {
         window.removeEventListener('eip6963:announceProvider', handler as EventListener);
         
         if (provider) {
-          // CRITICAL: Additional verification - check rdns to ensure correct wallet
-          if (walletInfo) {
-            const rdns = walletInfo.rdns?.toLowerCase() || '';
-            // Verify MetaMask
-            if (rdns === 'io.metamask' || rdns.includes('metamask')) {
-              const ethereum = (window as any).ethereum;
-              if (provider === ethereum && (!ethereum.isMetaMask || ethereum.isBraveWallet)) {
-                reject(new Error('MetaMask provider verification failed. Detected a different wallet.'));
-                return;
-              }
-              // Double-check: ensure it's not Binance
-              if ((window as any).BinanceChain && provider === (window as any).BinanceChain) {
-                reject(new Error('MetaMask provider verification failed. Detected Binance Wallet instead.'));
-                return;
-              }
-            }
-            // Verify Binance
-            if (rdns === 'com.binance.wallet' || rdns.includes('binance')) {
-              const binanceChain = (window as any).BinanceChain;
-              if (provider !== binanceChain) {
-                reject(new Error('Binance Wallet provider verification failed. Provider mismatch.'));
-                return;
-              }
-            }
-          }
+          // CRITICAL: Trust EIP-6963 provider - it's the source of truth
+          // EIP-6963 ensures the provider matches the wallet UUID
+          // No additional verification needed - this prevents false rejections
+          console.log(`[findEIP6963Provider] Resolving provider for UUID ${uuid}`);
           resolve(provider);
         } else {
           reject(new Error(`Provider with UUID ${uuid} not found. Matched UUIDs: ${matchedUuids.join(', ') || 'none'}`));
