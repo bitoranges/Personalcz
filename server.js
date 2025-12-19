@@ -1029,9 +1029,30 @@ if (process.env.NODE_ENV !== 'test' && require.main === module) {
     console.log('✅ Server is ready to accept connections');
     console.log('✅ Server startup completed successfully');
     console.log('✅ Server is ready to accept HTTP requests');
+    
+    // CRITICAL: Verify server is actually listening
+    if (!server.listening) {
+      console.error('❌ CRITICAL: Server callback called but server is not listening!');
+      process.exit(1);
+    }
+    
+    // Log server state for debugging
+    console.log('✅ Server listening state:', server.listening);
+    console.log('✅ Server address:', server.address());
   });
   
-  // Note: Server listen errors are handled above, this is for runtime errors
+  // CRITICAL: Handle listen errors separately (before server starts)
+  server.on('error', (error) => {
+    console.error('❌ Server listen/runtime error:', error);
+    console.error('❌ Error code:', error.code);
+    console.error('❌ Error message:', error.message);
+    if (error.code === 'EADDRINUSE') {
+      console.error(`❌ Port ${PORT} is already in use.`);
+      process.exit(1);
+    }
+    // For other errors, log but don't exit - server might recover
+    console.error('❌ Server error occurred, but continuing...');
+  });
   server.on('error', (error) => {
     console.error('❌ Server runtime error:', error);
     console.error('❌ Error code:', error.code);
