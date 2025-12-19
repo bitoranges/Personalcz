@@ -564,6 +564,25 @@ class x402Client {
 
       // Get signer for this payment
       const signer = await ethersProvider.getSigner();
+      
+      // CRITICAL: Ensure walletAddress is set from signer if not already set
+      // This handles cases where walletAddress might be null after network switch
+      if (!this.walletAddress) {
+        try {
+          const signerAddress = await signer.getAddress();
+          if (signerAddress) {
+            this.walletAddress = signerAddress;
+            console.log('[x402-client] requestPayment: Got wallet address from signer:', signerAddress);
+          }
+        } catch (addressError) {
+          console.error('[x402-client] requestPayment: Failed to get address from signer:', addressError);
+        }
+      }
+      
+      // CRITICAL: Validate walletAddress before proceeding
+      if (!this.walletAddress) {
+        throw new Error('Wallet address is required but not available. Please connect your wallet.');
+      }
 
       // Amount validation already done at the start of try block
       
@@ -590,7 +609,11 @@ class x402Client {
 
       // Check balance - NOW we're guaranteed to be on Base network
       // CRITICAL: Wrap balance check in try-catch to handle any errors gracefully
+      // CRITICAL: Ensure walletAddress is valid before calling balanceOf
       try {
+        if (!this.walletAddress || this.walletAddress === 'null' || this.walletAddress === 'undefined') {
+          throw new Error('Wallet address is invalid. Please reconnect your wallet.');
+        }
         const balance = await usdcContract.balanceOf(this.walletAddress);
         const balanceFormatted = ethers.formatUnits(balance, 6);
         console.log(`USDC Balance check: Required: ${amount}, Available: ${balanceFormatted}`);
