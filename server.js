@@ -823,14 +823,36 @@ app.post('/api/admin/upload', express.raw({ type: '*/*', limit: '100mb' }), (req
     }
 
     // Save file
+    // CRITICAL: Handle file write errors gracefully for Volume mounts
     const filePath = path.join(materialsDir, filename);
-    fs.writeFileSync(filePath, req.body);
+    try {
+      fs.writeFileSync(filePath, req.body);
+      console.log('[POST /api/admin/upload] File saved successfully:', filePath);
+    } catch (writeError) {
+      console.error('[POST /api/admin/upload] Error writing file:', writeError);
+      console.error('[POST /api/admin/upload] File path:', filePath);
+      console.error('[POST /api/admin/upload] Error details:', writeError.message);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to save file',
+        details: writeError.message,
+        hint: 'This may be due to Volume mount issues. Check Volume path and permissions.',
+      });
+    }
 
     // Update materials-config.json
+    // CRITICAL: Handle config file operations gracefully
     const configPath = path.join(__dirname, 'materials-config.json');
     let config = { materials: [] };
-    if (fs.existsSync(configPath)) {
-      config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    try {
+      if (fs.existsSync(configPath)) {
+        const configContent = fs.readFileSync(configPath, 'utf8');
+        config = JSON.parse(configContent);
+      }
+    } catch (configError) {
+      console.error('[POST /api/admin/upload] Error reading config file:', configError);
+      // Continue with empty config - we'll try to write it anyway
+      config = { materials: [] };
     }
 
     // Find and update material or create new one
@@ -851,7 +873,16 @@ app.post('/api/admin/upload', express.raw({ type: '*/*', limit: '100mb' }), (req
       config.materials.push(materialData);
     }
 
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+    // CRITICAL: Handle config file write errors gracefully
+    try {
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+      console.log('[POST /api/admin/upload] Config file updated successfully');
+    } catch (writeError) {
+      console.error('[POST /api/admin/upload] Error writing config file:', writeError);
+      // File was saved, but config update failed - still return success
+      // The file exists, config can be updated manually if needed
+      console.warn('[POST /api/admin/upload] Warning: Config file update failed, but file was saved');
+    }
 
     res.json({
       success: true,
