@@ -419,23 +419,44 @@ class x402Client {
         throw new Error('No wallet provider available. Please select a wallet first.');
       }
       
-      // Get account address for this payment
-      let accounts;
-      if (walletProvider.request) {
-        accounts = await walletProvider.request({ method: 'eth_requestAccounts' });
-      } else if (walletProvider.enable) {
-        accounts = await walletProvider.enable();
+      // CRITICAL: Only request accounts if we don't already have a wallet address
+      // unlockContent already requested accounts, so we should reuse that address
+      // This prevents duplicate connection popups
+      if (!this.walletAddress) {
+        console.log('[x402-client] requestPayment: No wallet address, requesting accounts...');
+        // Get account address for this payment
+        let accounts;
+        try {
+          if (walletProvider.request) {
+            accounts = await walletProvider.request({ method: 'eth_requestAccounts' });
+          } else if (walletProvider.enable) {
+            accounts = await walletProvider.enable();
+          } else {
+            throw new Error('Wallet provider does not support connection');
+          }
+          
+          const address = Array.isArray(accounts) ? accounts[0] : accounts;
+          if (!address) {
+            throw new Error('No account address returned from wallet');
+          }
+          
+          // Set wallet address for this payment session
+          this.walletAddress = address;
+          console.log('[x402-client] requestPayment: Got wallet address:', address);
+        } catch (connectError) {
+          // CRITICAL: If user rejects connection, return null immediately
+          if (connectError.code === 4001 || 
+              connectError.message?.includes('rejected') || 
+              connectError.message?.includes('denied') ||
+              connectError.message?.includes('User rejected')) {
+            console.log('[x402-client] requestPayment: User rejected connection');
+            return null; // Return null to indicate cancellation
+          }
+          throw connectError; // Re-throw other errors
+        }
       } else {
-        throw new Error('Wallet provider does not support connection');
+        console.log('[x402-client] requestPayment: Reusing existing wallet address:', this.walletAddress);
       }
-      
-      const address = Array.isArray(accounts) ? accounts[0] : accounts;
-      if (!address) {
-        throw new Error('No account address returned from wallet');
-      }
-      
-      // Set wallet address for this payment session
-      this.walletAddress = address;
     }
 
     try {
@@ -709,42 +730,32 @@ class x402Client {
    */
   async unlockContent(provider = null) {
     try {
-      // For x402, we don't need to pre-connect wallet
-      // Payment will be requested on-demand when 402 is received
-      // CRITICAL: Always set rawProvider when provider is provided
-      // This ensures handlePaymentRequired uses the correct wallet
+      // CRITICAL: x402 protocol flow:
+      // 1. Request resource (GET /api/unlock)
+      // 2. Server returns 402 Payment Required
+      // 3. Client handles payment automatically (connect wallet + execute transaction)
+      // 4. Client retries request with payment proof
+      // 
+      // We should NOT pre-connect wallet here - let the 402 response trigger payment flow
+      // This ensures we only request connection once, when payment is actually needed
+      
       if (provider) {
-        // CRITICAL: Store raw provider for direct use in requestPayment and handlePaymentRequired
-        // This MUST be set before any async operations to ensure correct wallet is used
+        // CRITICAL: Store raw provider for use in payment flow
+        // But DON'T request accounts here - wait for 402 response
         console.log('[x402-client] unlockContent: Setting rawProvider:', provider === window.ethereum ? 'ethereum' : provider === window.BinanceChain ? 'BinanceChain' : 'other');
         this.rawProvider = provider;
         
-        // Also create ethers provider for network checks if needed
+        // Create ethers provider for network checks if needed
         try {
           this.provider = new ethers.BrowserProvider(provider);
         } catch (providerError) {
           // Continue without ethers provider - we'll use raw provider directly
         }
         
-        // Get wallet address immediately if provider is available
-        try {
-          let accounts;
-          if (provider.request) {
-            accounts = await provider.request({ method: 'eth_requestAccounts' });
-          } else if (provider.enable) {
-            accounts = await provider.enable();
-          }
-          if (accounts) {
-            const address = Array.isArray(accounts) ? accounts[0] : accounts;
-            if (address) {
-              this.walletAddress = address;
-              console.log('[x402-client] unlockContent: Got wallet address:', address);
-            }
-          }
-        } catch (addressError) {
-          // Continue - address will be obtained during payment
-          console.log('[x402-client] unlockContent: Address request failed (will get during payment):', addressError.message);
-        }
+        // CRITICAL: DO NOT request accounts here - wait for 402 response
+        // This prevents duplicate connection popups
+        // The payment flow will request accounts when needed
+        console.log('[x402-client] unlockContent: Provider set, will request accounts during payment flow');
       }
 
       // First check if already unlocked by checking payment status
