@@ -174,6 +174,27 @@ export const MaterialsCard: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [API_URL]);
 
+  // Fetch materials list from server on component mount
+  useEffect(() => {
+    const loadMaterials = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/materials`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.materials && data.materials.length > 0) {
+            setMaterials(data.materials);
+            console.log('[MaterialsCard] Loaded materials from server:', data.materials);
+          }
+        }
+      } catch (err: any) {
+        console.error('[MaterialsCard] Failed to load materials from server:', err);
+        // Keep using MOCK_MATERIALS as fallback
+      }
+    };
+    
+    loadMaterials();
+  }, [API_URL]);
+
   const checkStatus = async (client: any, address?: string) => {
     if (!client) {
       setIsCheckingStatus(false);
@@ -203,7 +224,7 @@ export const MaterialsCard: React.FC = () => {
       if (status.unlocked) {
         setIsUnlocked(true);
         setWalletAddress(addressToCheck);
-        // Fetch materials
+        // Fetch materials with download URLs
         await fetchMaterials(client);
       } else {
         // Explicitly set to false if not unlocked (clear any previous state)

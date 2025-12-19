@@ -737,6 +737,38 @@ app.post('/api/payment-intent', (req, res) => {
 });
 
 /**
+ * Get materials list (public endpoint - no payment required)
+ * GET /api/materials
+ * Returns list of materials with basic info (no download URLs)
+ */
+app.get('/api/materials', (req, res) => {
+  try {
+    // Return materials list without download URLs (public info only)
+    const publicMaterials = materialsConfig.materials.map(material => ({
+      id: material.id,
+      title: material.title,
+      description: material.description,
+      type: material.type,
+      date: material.date,
+      ...(material.type === 'link' && material.url ? { url: material.url } : {}),
+      // Don't include downloadPath or downloadUrl - those require payment
+    }));
+    
+    res.json({
+      success: true,
+      materials: publicMaterials,
+    });
+  } catch (error) {
+    console.error('[GET /api/materials] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error',
+      message: error.message,
+    });
+  }
+});
+
+/**
  * File download endpoint - protected by payment verification
  * GET /api/download/:materialId
  */
