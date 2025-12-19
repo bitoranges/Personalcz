@@ -1038,9 +1038,42 @@ if (process.env.NODE_ENV !== 'test' && require.main === module) {
     console.error('❌ Rejection logged, server continues running...');
   });
   
+  // CRITICAL: Ensure server stays alive
+  // Prevent process from exiting if there are no active handles
+  // This is especially important for Railway deployments
+  const keepAliveInterval = setInterval(() => {
+    if (server.listening) {
+      // Server is still listening, all good
+      // This interval keeps the event loop alive
+    } else {
+      console.error('❌ Server stopped listening!');
+      clearInterval(keepAliveInterval);
+    }
+  }, 30000); // Check every 30 seconds
+  
+  // Ensure process doesn't exit unexpectedly
+  process.on('SIGTERM', () => {
+    console.log('📛 SIGTERM received, shutting down gracefully...');
+    clearInterval(keepAliveInterval);
+    server.close(() => {
+      console.log('✅ Server closed');
+      process.exit(0);
+    });
+  });
+  
+  process.on('SIGINT', () => {
+    console.log('📛 SIGINT received, shutting down gracefully...');
+    clearInterval(keepAliveInterval);
+    server.close(() => {
+      console.log('✅ Server closed');
+      process.exit(0);
+    });
+  });
+  
   // Log server startup completion
   console.log('✅ Server startup completed successfully');
   console.log('✅ Server is ready to accept HTTP requests');
+  console.log('✅ Server will stay alive and accept connections');
 }
 
 module.exports = app;
