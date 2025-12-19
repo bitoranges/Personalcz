@@ -235,6 +235,12 @@ export const MaterialsCard: React.FC = () => {
   };
 
   const handleUnlock = () => {
+    // CRITICAL: Prevent duplicate calls
+    if (isLoading) {
+      console.log('[MaterialsCard] handleUnlock: Already loading, ignoring duplicate call');
+      return;
+    }
+    
     // Show wallet selector instead of directly connecting
     if (!walletAddress) {
       setShowWalletSelector(true);
@@ -242,6 +248,15 @@ export const MaterialsCard: React.FC = () => {
     }
 
     // If already connected, proceed with unlock
+    // CRITICAL: Use the stored provider, not window.ethereum
+    if (!selectedWalletProvider && x402Client && x402Client.rawProvider) {
+      // Use the stored provider from previous connection
+      console.log('[MaterialsCard] handleUnlock: Using stored provider from x402Client');
+    } else if (!selectedWalletProvider) {
+      // No provider stored - need to select wallet again
+      setShowWalletSelector(true);
+      return;
+    }
     proceedWithUnlock();
   };
 

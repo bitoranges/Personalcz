@@ -756,9 +756,11 @@ class x402Client {
         if (status.unlocked) {
           // Already unlocked, fetch content
           // CRITICAL: Pass provider to fetchWithPayment to ensure correct wallet is used
+          // Use the provider passed to unlockContent, not this.rawProvider (which might be stale)
+          const providerToUse = provider || this.rawProvider;
           const contentResponse = await this.fetchWithPayment(`${this.apiUrl}/api/unlock`, {
             method: 'GET',
-          }, provider);
+          }, providerToUse);
           // Clone to avoid body stream error
           const contentResponseClone = contentResponse.clone();
           const contentData = await contentResponseClone.json();
@@ -768,7 +770,6 @@ class x402Client {
           // If status check fails, continue with payment flow
           console.log('Status check failed, proceeding with payment flow:', statusError);
         }
-      } else {
       }
 
       // Not unlocked, trigger payment flow
