@@ -537,15 +537,18 @@ export const MaterialsCard: React.FC = () => {
   const findEIP6963Provider = (uuid: string): Promise<any> => {
     return new Promise((resolve, reject) => {
       let provider = null;
+      let walletInfo = null;
       const matchedUuids: string[] = [];
       
       const handler = (event: CustomEvent) => {
         const eventUuid = event.detail?.info?.uuid;
         const eventProvider = event.detail?.provider;
+        const eventInfo = event.detail?.info;
         
         // CRITICAL: Use EXACT UUID match - no partial matching!
         if (eventUuid === uuid && !provider) {
           provider = eventProvider;
+          walletInfo = eventInfo;
           matchedUuids.push(eventUuid);
         }
       };
@@ -557,6 +560,31 @@ export const MaterialsCard: React.FC = () => {
         window.removeEventListener('eip6963:announceProvider', handler as EventListener);
         
         if (provider) {
+          // CRITICAL: Additional verification - check rdns to ensure correct wallet
+          if (walletInfo) {
+            const rdns = walletInfo.rdns?.toLowerCase() || '';
+            // Verify MetaMask
+            if (rdns === 'io.metamask' || rdns.includes('metamask')) {
+              const ethereum = (window as any).ethereum;
+              if (provider === ethereum && (!ethereum.isMetaMask || ethereum.isBraveWallet)) {
+                reject(new Error('MetaMask provider verification failed. Detected a different wallet.'));
+                return;
+              }
+              // Double-check: ensure it's not Binance
+              if ((window as any).BinanceChain && provider === (window as any).BinanceChain) {
+                reject(new Error('MetaMask provider verification failed. Detected Binance Wallet instead.'));
+                return;
+              }
+            }
+            // Verify Binance
+            if (rdns === 'com.binance.wallet' || rdns.includes('binance')) {
+              const binanceChain = (window as any).BinanceChain;
+              if (provider !== binanceChain) {
+                reject(new Error('Binance Wallet provider verification failed. Provider mismatch.'));
+                return;
+              }
+            }
+          }
           resolve(provider);
         } else {
           reject(new Error(`Provider with UUID ${uuid} not found. Matched UUIDs: ${matchedUuids.join(', ') || 'none'}`));
