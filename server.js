@@ -9,6 +9,7 @@ require('dotenv').config();
 
 // Import dependencies with error handling
 let express, cors, path, fs, crypto, ethers;
+let S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand;
 
 try {
   express = require('express');
@@ -17,6 +18,17 @@ try {
   fs = require('fs');
   crypto = require('crypto');
   ethers = require('ethers');
+  
+  // Try to load AWS SDK for R2 (optional - only if R2 is configured)
+  try {
+    const { S3Client: S3, PutObjectCommand: PutObject, GetObjectCommand: GetObject, HeadObjectCommand: HeadObject } = require('@aws-sdk/client-s3');
+    S3Client = S3;
+    PutObjectCommand = PutObject;
+    GetObjectCommand = GetObject;
+    HeadObjectCommand = HeadObject;
+  } catch (s3Error) {
+    console.log('ℹ️ AWS SDK not available (R2 storage will be disabled)');
+  }
 } catch (error) {
   console.error('❌ Failed to load dependencies:', error.message);
   console.error('❌ Please run: npm install');
@@ -51,7 +63,7 @@ try {
 // Serve static files from frontend build directory
 if (frontendBuildExists) {
   try {
-    app.use(express.static(frontendBuildPath));
+app.use(express.static(frontendBuildPath));
     console.log('✅ Serving static files from:', frontendBuildPath);
   } catch (staticError) {
     console.error('❌ Error setting up static file serving:', staticError);
@@ -87,6 +99,40 @@ try {
   }
 } catch (fsError) {
   console.error('❌ Error setting up assets serving:', fsError);
+}
+
+// Initialize R2/S3 client if configured
+let r2Client = null;
+const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID;
+const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID;
+const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY;
+const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME || 'personalcz';
+const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL;
+const R2_ENDPOINT = R2_ACCOUNT_ID ? `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com` : null;
+
+if (R2_ACCOUNT_ID && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY && S3Client) {
+  try {
+    r2Client = new S3Client({
+      region: 'auto',
+      endpoint: R2_ENDPOINT,
+      credentials: {
+        accessKeyId: R2_ACCESS_KEY_ID,
+        secretAccessKey: R2_SECRET_ACCESS_KEY,
+      },
+    });
+    console.log('✅ R2 storage initialized');
+    console.log('✅ R2 Bucket:', R2_BUCKET_NAME);
+    console.log('✅ R2 Endpoint:', R2_ENDPOINT);
+  } catch (r2Error) {
+    console.error('❌ Failed to initialize R2 client:', r2Error.message);
+    console.warn('⚠️ Falling back to local file storage');
+  }
+} else {
+  if (!R2_ACCOUNT_ID) {
+    console.log('ℹ️ R2 not configured - using local file storage');
+  } else if (!S3Client) {
+    console.warn('⚠️ AWS SDK not installed - R2 storage disabled');
+  }
 }
 
 // Load materials configuration
@@ -165,26 +211,26 @@ let provider = null;
 
 // Initialize provider asynchronously to avoid blocking server startup
 (async () => {
-  try {
-    if (RECEIVER_ADDRESS) {
-      provider = new ethers.JsonRpcProvider(BASE_RPC_URL);
+try {
+  if (RECEIVER_ADDRESS) {
+    provider = new ethers.JsonRpcProvider(BASE_RPC_URL);
       // Test connection (non-blocking)
       provider.getNetwork().then(() => {
-        console.log('✅ Connected to Base network:', BASE_RPC_URL);
-        console.log('✅ Receiver address:', RECEIVER_ADDRESS);
+    console.log('✅ Connected to Base network:', BASE_RPC_URL);
+    console.log('✅ Receiver address:', RECEIVER_ADDRESS);
       }).catch((err) => {
         console.warn('⚠️ Provider connection test failed (non-critical):', err.message);
         // Provider still created, just connection test failed
       });
-    } else {
+  } else {
       console.warn('⚠️ RECEIVER_ADDRESS not set! Payment verification will fail.');
       console.warn('⚠️ Please set RECEIVER_ADDRESS environment variable in Railway.');
-    }
-  } catch (error) {
-    console.error('❌ Failed to initialize provider:', error.message);
-    console.error('❌ Error stack:', error.stack);
-    // Don't throw - allow server to start even if provider fails
   }
+} catch (error) {
+  console.error('❌ Failed to initialize provider:', error.message);
+  console.error('❌ Error stack:', error.stack);
+    // Don't throw - allow server to start even if provider fails
+}
 })();
 
 // USDC ERC20 ABI (minimal - just transfer and balance functions)
@@ -459,10 +505,10 @@ app.get('/', (req, res) => {
 app.get('/health', (req, res) => {
   try {
     const healthData = { 
-      status: 'ok', 
-      timestamp: new Date().toISOString(),
-      network,
-      receiverAddress: RECEIVER_ADDRESS || 'Not configured',
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    network,
+    receiverAddress: RECEIVER_ADDRESS || 'Not configured',
       provider: provider ? 'initialized' : 'not initialized',
       frontendPath: frontendBuildPath,
       frontendExists: fs.existsSync(frontendBuildPath),
@@ -694,7 +740,7 @@ app.post('/api/payment-intent', (req, res) => {
  * File download endpoint - protected by payment verification
  * GET /api/download/:materialId
  */
-app.get('/api/download/:materialId', (req, res) => {
+app.get('/api/download/:materialId', async (req, res) => {
   try {
     const { materialId } = req.params;
     const walletAddress = extractWalletAddress(req);
@@ -733,16 +779,72 @@ app.get('/api/download/:materialId', (req, res) => {
       });
     }
 
+    const storageType = material.storageType || 'local';
+    const filename = material.filename || path.basename(material.downloadPath);
+
+    // Handle R2 storage
+    if (storageType === 'r2' && r2Client) {
+      try {
+        const r2Key = material.downloadPath;
+        
+        // Check if file exists in R2
+        try {
+          const headCommand = new HeadObjectCommand({
+            Bucket: R2_BUCKET_NAME,
+            Key: r2Key,
+          });
+          await r2Client.send(headCommand);
+        } catch (headError) {
+          if (headError.name === 'NotFound' || headError.$metadata?.httpStatusCode === 404) {
+            return res.status(404).json({
+              success: false,
+              error: 'File not found in R2 storage',
+            });
+          }
+          throw headError;
+        }
+
+        // Get file from R2
+        const getCommand = new GetObjectCommand({
+          Bucket: R2_BUCKET_NAME,
+          Key: r2Key,
+        });
+        
+        const r2Response = await r2Client.send(getCommand);
+        const fileStream = r2Response.Body;
+
+        // Set headers
+        res.setHeader('Content-Type', getContentType(material.type));
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        if (r2Response.ContentLength) {
+          res.setHeader('Content-Length', r2Response.ContentLength);
+        }
+
+        // Stream file to response
+        fileStream.pipe(res);
+
+        console.log(`[GET /api/download] File downloaded from R2: ${r2Key} by ${walletAddress}`);
+        return;
+      } catch (r2Error) {
+        console.error('[GET /api/download] R2 download error:', r2Error);
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to download file from R2',
+          details: r2Error.message,
+        });
+      }
+    }
+
+    // Handle local storage (fallback)
     const filePath = path.join(__dirname, material.downloadPath);
 
     // Check if file exists
-    // CRITICAL: Handle Volume mount gracefully - file may be on Volume
     try {
-      if (!fs.existsSync(filePath)) {
+    if (!fs.existsSync(filePath)) {
         console.error(`[GET /api/download] File not found: ${filePath}`);
-        return res.status(404).json({
-          success: false,
-          error: 'File not found on server. Please contact administrator.',
+      return res.status(404).json({
+        success: false,
+        error: 'File not found on server. Please contact administrator.',
         });
       }
     } catch (fsError) {
@@ -755,7 +857,6 @@ app.get('/api/download/:materialId', (req, res) => {
 
     // Get file stats
     const stats = fs.statSync(filePath);
-    const filename = material.filename || path.basename(filePath);
 
     // Set headers for file download
     res.setHeader('Content-Type', getContentType(material.type));
@@ -767,7 +868,7 @@ app.get('/api/download/:materialId', (req, res) => {
     fileStream.pipe(res);
 
     // Log download
-    console.log(`File downloaded: ${filename} by ${walletAddress}`);
+    console.log(`[GET /api/download] File downloaded locally: ${filename} by ${walletAddress}`);
   } catch (error) {
     console.error('[GET /api/download] Error:', error);
     console.error('[GET /api/download] Error stack:', error.stack);
@@ -808,36 +909,56 @@ app.post('/api/admin/upload', express.raw({ type: '*/*', limit: '100mb' }), (req
       });
     }
 
-    // Create materials directory if it doesn't exist
-    // CRITICAL: Handle Volume mount gracefully - Volume may be mounted at /app/materials
-    const materialsDir = path.join(__dirname, 'materials', 'downloads');
-    try {
-      if (!fs.existsSync(materialsDir)) {
-        fs.mkdirSync(materialsDir, { recursive: true });
-        console.log('[POST /api/admin/upload] Created materials directory:', materialsDir);
+    // Upload to R2 or local storage
+    let storageLocation = 'local';
+    let filePath = null;
+    let r2Key = null;
+
+    if (r2Client) {
+      // Upload to R2
+      try {
+        r2Key = `materials/${filename}`;
+        const uploadCommand = new PutObjectCommand({
+          Bucket: R2_BUCKET_NAME,
+          Key: r2Key,
+          Body: req.body,
+          ContentType: getContentType(materialType),
+        });
+        
+        await r2Client.send(uploadCommand);
+        console.log('[POST /api/admin/upload] File uploaded to R2:', r2Key);
+        storageLocation = 'r2';
+      } catch (r2Error) {
+        console.error('[POST /api/admin/upload] R2 upload failed:', r2Error);
+        console.warn('[POST /api/admin/upload] Falling back to local storage');
+        // Fall through to local storage
       }
-    } catch (dirError) {
-      console.error('[POST /api/admin/upload] Error creating materials directory:', dirError);
-      // If directory creation fails (e.g., Volume mount issue), continue anyway
-      // The file write will fail later if there's a real problem
     }
 
-    // Save file
-    // CRITICAL: Handle file write errors gracefully for Volume mounts
-    const filePath = path.join(materialsDir, filename);
-    try {
-      fs.writeFileSync(filePath, req.body);
-      console.log('[POST /api/admin/upload] File saved successfully:', filePath);
-    } catch (writeError) {
-      console.error('[POST /api/admin/upload] Error writing file:', writeError);
-      console.error('[POST /api/admin/upload] File path:', filePath);
-      console.error('[POST /api/admin/upload] Error details:', writeError.message);
-      return res.status(500).json({
-        success: false,
-        error: 'Failed to save file',
-        details: writeError.message,
-        hint: 'This may be due to Volume mount issues. Check Volume path and permissions.',
-      });
+    // Fallback to local storage if R2 not available or failed
+    if (storageLocation === 'local') {
+    const materialsDir = path.join(__dirname, 'materials', 'downloads');
+      try {
+    if (!fs.existsSync(materialsDir)) {
+      fs.mkdirSync(materialsDir, { recursive: true });
+          console.log('[POST /api/admin/upload] Created materials directory:', materialsDir);
+        }
+      } catch (dirError) {
+        console.error('[POST /api/admin/upload] Error creating materials directory:', dirError);
+    }
+
+      filePath = path.join(materialsDir, filename);
+      try {
+    fs.writeFileSync(filePath, req.body);
+        console.log('[POST /api/admin/upload] File saved locally:', filePath);
+      } catch (writeError) {
+        console.error('[POST /api/admin/upload] Error writing file:', writeError);
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to save file',
+          details: writeError.message,
+        });
+      }
     }
 
     // Update materials-config.json
@@ -845,7 +966,7 @@ app.post('/api/admin/upload', express.raw({ type: '*/*', limit: '100mb' }), (req
     const configPath = path.join(__dirname, 'materials-config.json');
     let config = { materials: [] };
     try {
-      if (fs.existsSync(configPath)) {
+    if (fs.existsSync(configPath)) {
         const configContent = fs.readFileSync(configPath, 'utf8');
         config = JSON.parse(configContent);
       }
@@ -860,7 +981,8 @@ app.post('/api/admin/upload', express.raw({ type: '*/*', limit: '100mb' }), (req
     const materialData = {
       id: materialId,
       filename: filename,
-      downloadPath: `materials/downloads/${filename}`,
+      downloadPath: storageLocation === 'r2' ? r2Key : `materials/downloads/${filename}`,
+      storageType: storageLocation, // 'r2' or 'local'
       type: materialType,
       ...(req.headers['x-title'] && { title: req.headers['x-title'] }),
       ...(req.headers['x-description'] && { description: req.headers['x-description'] }),
@@ -875,7 +997,7 @@ app.post('/api/admin/upload', express.raw({ type: '*/*', limit: '100mb' }), (req
 
     // CRITICAL: Handle config file write errors gracefully
     try {
-      fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
       console.log('[POST /api/admin/upload] Config file updated successfully');
     } catch (writeError) {
       console.error('[POST /api/admin/upload] Error writing config file:', writeError);
@@ -889,7 +1011,8 @@ app.post('/api/admin/upload', express.raw({ type: '*/*', limit: '100mb' }), (req
       message: 'File uploaded successfully',
       materialId,
       filename,
-      filePath: `materials/downloads/${filename}`,
+      storageType: storageLocation,
+      filePath: storageLocation === 'r2' ? r2Key : `materials/downloads/${filename}`,
     });
   } catch (error) {
     console.error('[POST /api/admin/upload] Error:', error);
@@ -930,13 +1053,13 @@ function getContentType(type) {
 // This must be after all API routes
 app.get('*', (req, res) => {
   try {
-    // Skip API routes
-    if (req.path.startsWith('/api')) {
-      return res.status(404).json({ error: 'API endpoint not found' });
-    }
-    
-    // Serve index.html for all other routes (React Router)
-    const indexPath = path.join(frontendBuildPath, 'index.html');
+  // Skip API routes
+  if (req.path.startsWith('/api')) {
+    return res.status(404).json({ error: 'API endpoint not found' });
+  }
+  
+  // Serve index.html for all other routes (React Router)
+  const indexPath = path.join(frontendBuildPath, 'index.html');
     
     // Check if file exists before trying to send it
     if (!fs.existsSync(indexPath)) {
@@ -961,21 +1084,21 @@ app.get('*', (req, res) => {
       `);
     }
     
-    res.sendFile(indexPath, (err) => {
-      if (err) {
+  res.sendFile(indexPath, (err) => {
+    if (err) {
         console.error('[GET *] Error sending index.html:', err);
-        if (err.code === 'ENOENT') {
-          res.status(404).send(`
-            <html>
+      if (err.code === 'ENOENT') {
+        res.status(404).send(`
+          <html>
               <head><title>404 - Not Found</title></head>
-              <body style="font-family: sans-serif; padding: 40px;">
+            <body style="font-family: sans-serif; padding: 40px;">
                 <h1>404 - Page Not Found</h1>
                 <p>The requested page could not be found.</p>
                 <p><a href="/">Go to homepage</a></p>
-              </body>
-            </html>
-          `);
-        } else {
+            </body>
+          </html>
+        `);
+      } else {
           res.status(500).send(`
             <html>
               <head><title>500 - Server Error</title></head>
@@ -986,9 +1109,9 @@ app.get('*', (req, res) => {
               </body>
             </html>
           `);
-        }
       }
-    });
+    }
+  });
   } catch (error) {
     console.error('[GET *] Unexpected error:', error);
     res.status(500).json({
