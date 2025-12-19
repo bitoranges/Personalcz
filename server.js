@@ -885,7 +885,7 @@ app.get('/api/download/:materialId', async (req, res) => {
  * POST /api/admin/upload
  * Requires: X-Admin-Key header (set in environment variable ADMIN_KEY)
  */
-app.post('/api/admin/upload', express.raw({ type: '*/*', limit: '100mb' }), (req, res) => {
+app.post('/api/admin/upload', express.raw({ type: '*/*', limit: '100mb' }), async (req, res) => {
   try {
     // Simple admin authentication (use API key)
     const adminKey = process.env.ADMIN_KEY;
