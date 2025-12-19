@@ -353,6 +353,35 @@ export const MaterialsCard: React.FC = () => {
           if (!provider) {
             throw new Error(`Failed to find provider for ${wallet.name}. Please ensure the wallet is installed and unlocked.`);
           }
+          
+          // CRITICAL: Additional verification for MetaMask to prevent Binance confusion
+          if (wallet.name === 'MetaMask' || wallet.rdns === 'io.metamask') {
+            // Verify it's actually MetaMask, not Binance
+            const ethereum = (window as any).ethereum;
+            if (provider === ethereum) {
+              // Check if it's actually MetaMask
+              if (!ethereum.isMetaMask || ethereum.isBraveWallet) {
+                throw new Error('MetaMask not found. Detected a different wallet instead.');
+              }
+              // Double-check: ensure it's not Binance masquerading as MetaMask
+              if ((window as any).BinanceChain && ethereum === (window as any).BinanceChain) {
+                throw new Error('MetaMask not found. Detected Binance Wallet instead.');
+              }
+            }
+          }
+          
+          // CRITICAL: Additional verification for Binance to prevent MetaMask confusion
+          if (wallet.name === 'Binance Wallet' || wallet.rdns === 'com.binance.wallet') {
+            // Verify it's actually Binance, not MetaMask
+            const binanceChain = (window as any).BinanceChain;
+            if (provider !== binanceChain) {
+              // If provider is window.ethereum, it might be MetaMask, not Binance
+              const ethereum = (window as any).ethereum;
+              if (provider === ethereum && ethereum.isMetaMask) {
+                throw new Error('Binance Wallet not found. Detected MetaMask instead.');
+              }
+            }
+          }
         } catch (findError) {
           throw new Error(`Failed to connect to ${wallet.name}: ${findError.message}`);
         }
@@ -410,7 +439,9 @@ export const MaterialsCard: React.FC = () => {
         // CRITICAL: Clear provider on cancellation
         if (x402Client) {
           x402Client.rawProvider = null;
+          x402Client.walletAddress = null;
         }
+        setSelectedWalletProvider(null);
         return;
       }
       
@@ -420,9 +451,12 @@ export const MaterialsCard: React.FC = () => {
         setError(result.error || 'Failed to unlock content. Please try again.');
         setIsLoading(false);
         setShowWalletSelector(false);
+        // CRITICAL: Clear provider on error
         if (x402Client) {
           x402Client.rawProvider = null;
+          x402Client.walletAddress = null;
         }
+        setSelectedWalletProvider(null);
         return;
       }
       
@@ -470,11 +504,15 @@ export const MaterialsCard: React.FC = () => {
       )) {
         // User cancelled - show friendly message
         setError('Failed to unlock content. Please try again.');
+        // CRITICAL: Clear all wallet state on cancellation
         if (x402Client) {
           x402Client.rawProvider = null;
+          x402Client.walletAddress = null;
         }
+        setSelectedWalletProvider(null);
         setIsLoading(false);
         setShowWalletSelector(false);
+        // CRITICAL: Prevent wallet selector from reopening
         return;
       }
       
@@ -487,7 +525,11 @@ export const MaterialsCard: React.FC = () => {
     } finally {
       // CRITICAL: Always reset loading state, even if error occurred
       setIsLoading(false);
-      setShowWalletSelector(false);
+      // CRITICAL: Only close wallet selector if it's still open (don't reopen if already closed)
+      // This prevents the selector from reopening after user cancels
+      if (showWalletSelector) {
+        setShowWalletSelector(false);
+      }
     }
   };
 
