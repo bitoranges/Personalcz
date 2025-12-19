@@ -418,45 +418,47 @@ class x402Client {
       if (!walletProvider) {
         throw new Error('No wallet provider available. Please select a wallet first.');
       }
-      
-      // CRITICAL: Only request accounts if we don't already have a wallet address
-      // unlockContent already requested accounts, so we should reuse that address
-      // This prevents duplicate connection popups
-      if (!this.walletAddress) {
-        console.log('[x402-client] requestPayment: No wallet address, requesting accounts...');
-        // Get account address for this payment
-        let accounts;
-        try {
-          if (walletProvider.request) {
-            accounts = await walletProvider.request({ method: 'eth_requestAccounts' });
-          } else if (walletProvider.enable) {
-            accounts = await walletProvider.enable();
-          } else {
-            throw new Error('Wallet provider does not support connection');
-          }
-          
-          const address = Array.isArray(accounts) ? accounts[0] : accounts;
-          if (!address) {
-            throw new Error('No account address returned from wallet');
-          }
-          
-          // Set wallet address for this payment session
-          this.walletAddress = address;
-          console.log('[x402-client] requestPayment: Got wallet address:', address);
-        } catch (connectError) {
-          // CRITICAL: If user rejects connection, return null immediately
-          if (connectError.code === 4001 || 
-              connectError.message?.includes('rejected') || 
-              connectError.message?.includes('denied') ||
-              connectError.message?.includes('User rejected')) {
-            console.log('[x402-client] requestPayment: User rejected connection');
-            return null; // Return null to indicate cancellation
-          }
-          throw connectError; // Re-throw other errors
+    }
+    
+    // CRITICAL: Ensure walletAddress is set BEFORE proceeding with payment
+    // This must happen regardless of where walletProvider came from
+    // This prevents "unsupported addressable value" errors in balanceOf
+    if (!this.walletAddress && walletProvider) {
+      console.log('[x402-client] requestPayment: No wallet address, requesting accounts...');
+      // Get account address for this payment
+      let accounts;
+      try {
+        if (walletProvider.request) {
+          accounts = await walletProvider.request({ method: 'eth_requestAccounts' });
+        } else if (walletProvider.enable) {
+          accounts = await walletProvider.enable();
+        } else {
+          throw new Error('Wallet provider does not support connection');
         }
-      } else {
-        console.log('[x402-client] requestPayment: Reusing existing wallet address:', this.walletAddress);
+        
+        const address = Array.isArray(accounts) ? accounts[0] : accounts;
+        if (!address) {
+          throw new Error('No account address returned from wallet');
+        }
+        
+        // Set wallet address for this payment session
+        this.walletAddress = address;
+        console.log('[x402-client] requestPayment: Got wallet address:', address);
+      } catch (connectError) {
+        // CRITICAL: If user rejects connection, return null immediately
+        if (connectError.code === 4001 || 
+            connectError.message?.includes('rejected') || 
+            connectError.message?.includes('denied') ||
+            connectError.message?.includes('User rejected')) {
+          console.log('[x402-client] requestPayment: User rejected connection');
+          return null; // Return null to indicate cancellation
+        }
+        throw connectError; // Re-throw other errors
       }
+    } else if (this.walletAddress) {
+      console.log('[x402-client] requestPayment: Using existing wallet address:', this.walletAddress);
+    } else {
+      throw new Error('Wallet address is required but not available. Please connect your wallet.');
     }
 
     try {
